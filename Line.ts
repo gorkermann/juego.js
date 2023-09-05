@@ -1,0 +1,145 @@
+//////////
+// LINE //
+//////////
+
+/*
+	A line in two dimensions, from one point to another
+*/
+
+import { Material } from './Material.js'
+import { RayHit } from './RayHit.js'
+import { Vec2 } from './Vec2.js'
+
+import { between } from './util.js'
+
+export class Line {
+
+	p1: Vec2 = new Vec2(0, 0);	// first point
+	p2: Vec2 = new Vec2(0, 0);	// second point
+
+	material: Material = new Material( 0, 0, 0 );	
+
+	constructor( x1: number, y1: number, 
+				 x2: number, y2: number ) {
+
+		this.p1.setValues( x1, y1 );
+		this.p2.setValues( x2, y2 );
+	}
+
+	static fromLine( l: Line ): Line {
+		let line = new Line( 0, 0, 0, 0 );
+
+		line.p1 = l.p1;
+		line.p2 = l.p2; 
+		line.material = l.material;
+
+		return line;
+	}
+
+	static fromLineVals( l: Line ): Line {
+		let line = new Line( l.p1.x, l.p1.y, l.p2.x, l.p2.y );
+
+		line.material = l.material;
+
+		return line;
+	}	
+
+	static fromPoints ( p1: Vec2, p2: Vec2 ) {
+		let line = new Line( 0, 0, 0, 0 );
+
+		line.p1 = p1;
+		line.p2 = p2;
+
+		return line;		
+	}
+
+	static fromPointVals ( p1: Vec2, p2: Vec2 ) {
+		let line = new Line( p1.x, p1.y, p2.x, p2.y );
+
+		return line;		
+	}
+
+	getDirection(): Vec2 {
+		return this.p2.minus( this.p1 );
+	}
+
+	/*
+		intersects()
+		find the point of intersection with another line
+
+		line: the other line
+
+		returns: the intersection point, or null
+	*/ 
+	intersects( line: Line ): Vec2 | null {
+		let result = null;	
+
+		let fudge = 1.0;
+
+		if ( this.p2.x == this.p1.x && line.p2.x == line.p1.x ) {
+			
+	 	} else if ( Math.abs( this.p2.x - this.p1.x ) < 0.01 ) {
+			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
+			let yInt2 = line.p1.y - ( line.p1.x - this.p1.x ) * slope2;
+
+			if ( between( yInt2, this.p1.y, this.p2.y ) && between( this.p1.x, line.p1.x, line.p2.x ) &&
+				 between( yInt2, line.p1.y, line.p2.y )) {
+				result = new Vec2( this.p1.x, yInt2 );
+			}
+		} else if ( Math.abs( line.p2.x - line.p1.x ) < 0.01 ) {
+			return line.intersects( this );
+		} else {
+			let slope1 = ( this.p2.y - this.p1.y ) / ( this.p2.x - this.p1.x );
+			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
+
+			if ( slope1 != slope2 ) {
+				let yInt2 = line.p1.y - this.p1.y - (line.p1.x - this.p1.x) * slope2;
+
+				let intX = yInt2 / ( slope1 - slope2 ) + this.p1.x;
+				let intY = (intX - this.p1.x) * slope2 + yInt2 + this.p1.y
+
+				if ( between( intX, this.p1.x, this.p2.x ) && between( intX, line.p1.x, line.p2.x ) &&
+					 between( intY, this.p1.y, this.p2.y ) && between( intY, line.p1.y, line.p2.y ) ) {
+					result = new Vec2( intX, intY );
+				}
+			}
+		}
+
+		return result;
+	}
+
+	/* 
+		rayIntersect()
+	 
+	 	this: a ray from p1 to p2
+		otherLine: a flat surface to reflect off of
+	
+		returns: a RayHit object with the hit location and surface normal
+	*/
+
+	rayIntersect( otherLine: Line ): RayHit | null {
+		let intersection = this.intersects( otherLine );
+
+		if ( intersection === null ) {
+			return null;	
+		}
+
+		// Rotate the line 90 degrees to get a normal vector
+		let normal = new Vec2( otherLine.p1.y - otherLine.p2.y, 
+							   otherLine.p2.x - otherLine.p1.x ).normalize();
+
+		// Flip the normal if it's pointing in the same general direction as our ray
+		if ( this.p1.minus( intersection ).dot( normal ) < 0 ) {
+			normal.flip();
+		}
+
+		return new RayHit( intersection, normal, otherLine.material );
+	}
+
+	draw( context: CanvasRenderingContext2D ): void {
+		context.beginPath();
+		context.moveTo( this.p1.x, this.p1.y );	
+		context.lineTo( this.p2.x, this.p2.y );
+		context.stroke();
+	}
+}

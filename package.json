@@ -1,0 +1,14 @@
+{
+  "name": "juego",
+  "version": "1.0.0",
+  "description": "2D game utilities",
+  "main": "main.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Graham Smith",
+  "license": "ISC"
+}
