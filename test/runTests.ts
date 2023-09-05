@@ -124,7 +124,8 @@ function reportCoverage( coverage: Dict<Dict<string>> ) {
 let dirs = ['.'];
 
 let defaultModules: Array<string> = [
-	'./test_Vec2.js'
+	'./test_Vec2.js',
+	'./test_Line.js'
 ]
 
 /*

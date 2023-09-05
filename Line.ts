@@ -26,23 +26,13 @@ export class Line {
 		this.p2.setValues( x2, y2 );
 	}
 
-	static fromLine( l: Line ): Line {
-		let line = new Line( 0, 0, 0, 0 );
+	copy(): Line {
+		let line = new Line( this.p1.x, this.p1.y, this.p2.x, this.p2.y );
 
-		line.p1 = l.p1;
-		line.p2 = l.p2; 
-		line.material = l.material;
+		line.material = this.material.copy();
 
 		return line;
 	}
-
-	static fromLineVals( l: Line ): Line {
-		let line = new Line( l.p1.x, l.p1.y, l.p2.x, l.p2.y );
-
-		line.material = l.material;
-
-		return line;
-	}	
 
 	static fromPoints ( p1: Vec2, p2: Vec2 ) {
 		let line = new Line( 0, 0, 0, 0 );
@@ -53,10 +43,8 @@ export class Line {
 		return line;		
 	}
 
-	static fromPointVals ( p1: Vec2, p2: Vec2 ) {
-		let line = new Line( p1.x, p1.y, p2.x, p2.y );
-
-		return line;		
+	toString(): string {
+		 return '<(' + this.p1.x + ',' + this.p1.y + '),(' + this.p2.x + ',' + this.p2.y + ')>';
 	}
 
 	getDirection(): Vec2 {
@@ -74,11 +62,13 @@ export class Line {
 	intersects( line: Line ): Vec2 | null {
 		let result = null;	
 
-		let fudge = 1.0;
+		let dx_this = Math.abs( this.p2.x - this.p1.x );
+		let dx_line = Math.abs( line.p2.x - line.p1.x );
 
-		if ( this.p2.x == this.p1.x && line.p2.x == line.p1.x ) {
-			
-	 	} else if ( Math.abs( this.p2.x - this.p1.x ) < 0.01 ) {
+		if ( dx_this < 0.01 && dx_line < 0.01 ) {
+			// do nothing, return null
+
+	 	} else if ( dx_this < 0.01 ) {
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
 			let yInt2 = line.p1.y - ( line.p1.x - this.p1.x ) * slope2;
 
@@ -86,8 +76,10 @@ export class Line {
 				 between( yInt2, line.p1.y, line.p2.y )) {
 				result = new Vec2( this.p1.x, yInt2 );
 			}
-		} else if ( Math.abs( line.p2.x - line.p1.x ) < 0.01 ) {
+
+		} else if ( dx_line < 0.01 ) {
 			return line.intersects( this );
+
 		} else {
 			let slope1 = ( this.p2.y - this.p1.y ) / ( this.p2.x - this.p1.x );
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );

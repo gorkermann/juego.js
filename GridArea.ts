@@ -164,7 +164,7 @@ export class GridArea {
 		let points: Array<Vec2> = [];	
 		points.push( line.p1 );
 
-		let line2: Line = Line.fromLine( line );
+		let line2: Line = line.copy();
 
 		do {
 			let rayHit = this.shapecast( line2 );

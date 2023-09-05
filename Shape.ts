@@ -26,7 +26,7 @@ export class Shape {
 		let s = new Shape();
 
 		for ( let edge of this.edges ) {
-			s.edges.push( Line.fromLine( edge ) );
+			s.edges.push( edge.copy() );
 		}	
 
 		return s;
