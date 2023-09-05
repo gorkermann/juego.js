@@ -29,7 +29,8 @@ export class Line {
 	copy(): Line {
 		let line = new Line( this.p1.x, this.p1.y, this.p2.x, this.p2.y );
 
-		line.material = this.material.copy();
+		if ( !this.material ) line.material = null;
+		else line.material = this.material.copy();
 
 		return line;
 	}
