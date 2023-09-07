@@ -198,7 +198,7 @@ function test_Shape( tf: TestFuncs ) {
 
 	s = Shape.fromPoints( p );
 
-	let l = new Line( -50, 75, 150, 75 ); // outside
+	let l = new Line( -50, 75, 150, 75 ); // through
 	tf.ASSERT_EQ( s.slice( l ), 0.75 );
 
 	l = new Line( 150, 75, -50, 75 ); // flipped
@@ -207,16 +207,19 @@ function test_Shape( tf: TestFuncs ) {
 	l = new Line( 25, 75, 75, 75 ); // inside
 	tf.ASSERT_EQ( s.slice( l ), 0.75 );
 
-	l = new Line( 50, 75, 100, 75 ); // on line
+	l = new Line( 50, 75, 100, 75 ); // line on shape edges
 	tf.ASSERT_EQ( s.slice( l ), 0.75 );
 
 	l = new Line( 25, 0, 25, 100 ); // vertical
 	tf.ASSERT_EQ( s.slice( l ), 0.75 );
 
+	l = new Line( 50, 50, 50, 150 ); // vertical, half in
+	tf.ASSERT_EQ( s.slice( l ), 0.50 );
+
 	l = new Line( 0, 10, 100, 90 ); // slanted
 	tf.ASSERT_EQ( s.slice( l ), 0.5 );
 
-	l = new Line( 0, 0, 100, 100 ); // on points
+	l = new Line( 0, 0, 100, 100 ); // diagonal across, on points
 	tf.ASSERT_EQ( s.slice( l ), 0.5 );
 
 	l = new Line( 0, 0, 100, 0 ); // on points
@@ -224,6 +227,20 @@ function test_Shape( tf: TestFuncs ) {
 
 	l = new Line( 100, 0, 0, 0 ); // on points
 	tf.ASSERT_EQ( s.slice( l ), 1.0 );
+
+	l = new Line( 0, -50, 100, -50 ); // above
+	tf.ASSERT_EQ( s.slice( l ), 0.0 );
+
+	l = new Line( 0, 150, 100, 150 ); // below
+	tf.ASSERT_EQ( s.slice( l ), 1.0 );
+
+	l = new Line( 150, 50, 50, -50 ); // one point on line, others left
+	tf.ASSERT_EQ( s.slice( l ), 1.0 );
+
+	l = new Line( 50, -50, 150, 50 ); // one point on line, others right
+	tf.ASSERT_EQ( s.slice( l ), 0.0 );
+
+
 
 	/*
 		-[]--[]-
@@ -243,10 +260,10 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.getArea(), 500 );
 
 	l = new Line( 0, 5, 30, 5 );
-	tf.ASSERT_EQ( s.slice( l ), 0.2 );
+	tf.ASSERT_EQ( s.slice( l ), 0.2 ); // through
 
 	l = new Line( 30, 5, 5, 5 );
-	tf.ASSERT_EQ( s.slice( l ), 0.8 );
+	tf.ASSERT_EQ( s.slice( l ), 0.8 ); // flipped
 }
 
 let tests: Array<Test> = [];

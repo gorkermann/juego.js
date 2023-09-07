@@ -4,6 +4,7 @@ export class Contact {
 	point: Vec2;
 	normal: Vec2;
 	vel: Vec2 = new Vec2( 0, 0 );
+	slice: number = 0.0;
 
 	constructor( point: Vec2, normal: Vec2 ) {
 		if ( !point ) {

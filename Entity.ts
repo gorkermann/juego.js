@@ -265,6 +265,8 @@ export class Entity {
 			use fastest moving of the contacts
 			contact with normal most counter to object position (dot closest to -1)
 			average normals to deal with spikes
+
+			output multiple contacts for entities with multiple shapes
 		 */
 
 		let contact: Contact = null;
@@ -278,6 +280,8 @@ export class Entity {
 						// The two objects' collision boxes overlap
 						if ( point ) {
 
+							let slice = shape.slice( otherShape.edges[i] );
+
 							// velocity of the contact point
 							let vel = otherShape.getVel( point );
 	
@@ -287,13 +291,16 @@ export class Entity {
 							if ( !contact ) {
 								contact = new Contact( point, otherShape.normals[i].copy() );
 								contact.vel = nvel;
+								contact.slice = slice;
 
 							} else { 
 
 								// a rotating object may create two contacts with different velocities
-								if ( vel.lengthSq() > contact.vel.lengthSq() ) {
+								if ( slice > contact.slice || 
+									 ( Math.abs( slice - contact.slice ) < 0.01 && vel.lengthSq() > contact.vel.lengthSq() ) ) {
 									contact = new Contact( point, otherShape.normals[i].copy() );
-									contact.vel = nvel;						
+									contact.vel = nvel;
+									contact.slice = slice;					
 								}
 							}
 						}

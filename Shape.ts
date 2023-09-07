@@ -262,19 +262,41 @@ export class Shape {
 	}
 
 	slice( line: Line ): number {
-		let inters = [];
+		// check whether any of the points are on different sides of the line
+		let sides: Array<number> = [];
+
+		let v1 = line.p2.minus( line.p1 );
+
+		for ( let i = 0; i < this.edges.length; i++ ) {
+			let cross = v1.cross( this.edges[i].p1.minus( line.p1 ) );
+
+			if ( cross < -0.01 ) {
+				sides.push( -1 );
+			} else if ( cross > 0.01 ) {
+				sides.push ( 1 );
+			} else {
+				sides.push( 0 );
+			}
+		}
+
+		let leftCount = sides.filter( x => x < 0 ).length;
+		let rightCount = sides.filter( x => x > 0 ).length;
+
+		if ( leftCount == 0 ) return 0.0; // all points are on the right
+		if ( rightCount == 0 ) return 1.0; // all points are on the left
+
+		let inters: Array<Vec2> = [];
 		inters[this.edges.length - 1] = null;
 		inters.fill( null );
 
-		let count = 0;
-
 		// find edges which intersect the line
 		for ( let i = 0; i < this.edges.length; i++ ) {
+			if ( sides[i] == sides[(i + 1) % this.edges.length] ) continue;
+
 			let inter = this.edges[i].intersects( line, true )
 
 			if ( inter != null ) {
 				inters[i] = inter;
-				count += 1;
 			}
 		}
 
@@ -290,6 +312,10 @@ export class Shape {
 			}
 		}
 
+		if ( inters.length == 0 ) {
+			throw new Error( 'Shape.slice: no intersections' );
+		}
+
 		// sort intersections in by farthest along in the direction of the line
 		let sortedInters = inters.filter( x => x )
 
@@ -302,10 +328,9 @@ export class Shape {
 		let startIndex = inters.indexOf( sortedInters[0] );
 
 		// travel clockwise
-		let side = 1;
-		let v1 = line.p2.minus( line.p1 );
+		let side = -1;
 		let v2 = this.edges[startIndex].p2.minus( inters[startIndex] );
-		if ( v1.cross( v2 ) > 0 ) side = -1;
+		if ( v1.cross( v2 ) > 0 ) side = 1;
 
 		// add area of strands to the left of the line, subtract area of strands to the right
 		let strand = [inters[startIndex]];
@@ -320,7 +345,7 @@ export class Shape {
 				strand.push( inters[index] );
 
 				let partial = Shape.fromPoints( strand );
-				if ( side > 0 ) leftArea += partial.getArea();
+				if ( side < 0 ) leftArea += partial.getArea();
 				//else rightArea += partial.getArea();
 
 				side *= -1;

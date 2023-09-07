@@ -68,7 +68,7 @@ export class Line {
 		let dx_line = Math.abs( line.p2.x - line.p1.x );
 
 		if ( dx_this < 0.01 && dx_line < 0.01 ) {
-			// do nothing, return null
+			// both vertical do nothing, return null
 
 	 	} else if ( dx_this < 0.01 ) {
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
@@ -77,11 +77,19 @@ export class Line {
 			if ( between( yInt2, this.p1.y, this.p2.y ) && 
 				 ( between( this.p1.x, line.p1.x, line.p2.x ) || infinite ) ) {
 				//( between( yInt2, line.p1.y, line.p2.y ) || infinite ) ) { // not necessary?
+				
 				result = new Vec2( this.p1.x, yInt2 );
 			}
 
 		} else if ( dx_line < 0.01 ) {
-			return line.intersects( this );
+			let slope1 = ( this.p2.y - this.p1.y ) / ( this.p2.x - this.p1.x );
+			let yInt1 = this.p1.y - ( this.p1.x - line.p1.x ) * slope1;
+
+			if ( ( between( yInt1, line.p1.y, line.p2.y ) || infinite ) && 
+				 between( line.p1.x, this.p1.x, this.p2.x ) ) {
+
+				result = new Vec2( line.p1.x, yInt1 );
+			}
 
 		} else {
 			let slope1 = ( this.p2.y - this.p1.y ) / ( this.p2.x - this.p1.x );
@@ -97,6 +105,7 @@ export class Line {
 					 ( between( intX, line.p1.x, line.p2.x ) || infinite ) &&
 					 between( intY, this.p1.y, this.p2.y ) && 
 					 ( between( intY, line.p1.y, line.p2.y ) || infinite ) ) {
+
 					result = new Vec2( intX, intY );
 				}
 			}
