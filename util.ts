@@ -1,3 +1,5 @@
+export type Dict<Type> = { [key: string]: Type };
+
 export function capIndex(val: number, lo: number, hi: number): number {
 	if (val < lo) val = lo;
 	if (val > hi - 1) val = hi - 1;

@@ -6,8 +6,9 @@
 	An empty area that smart entities can use to check for collisions (like line-of-sight)
 */
 
-import { Debug } from "./Debug.js"
-import { Entity } from "./Entity.js"
+import { Debug } from './Debug.js'
+import { Contact } from './Contact.js'
+import { Entity } from './Entity.js'
 import { Vec2 } from './Vec2.js'
 
 export class Region extends Entity {
@@ -27,7 +28,7 @@ export class Region extends Entity {
 		this.containsPlayer = false;
 	}
 
-	hitWith( otherEntity: Entity ): void {
+	hitWith( otherEntity: Entity, contact: Contact ): void {
 		if ( otherEntity.isPlayer ) {
 			this.containsPlayer = true;
 			this.playerPos = otherEntity.pos.copy();

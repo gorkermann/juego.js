@@ -7,27 +7,44 @@
 */
 
 import { Debug } from "./Debug.js"
-import { Entity } from "./Entity.js"
+import { Entity, cullList } from "./Entity.js"
 import { GridArea } from "./GridArea.js"
 
-let overlapList = function( entity: Entity, list: Array<Entity> ) {
-	for ( let otherEntity of list ) {
-		
-		/*if ( 	 !( entity.collisionGroup == GROUP.none ) &&
-				( ( entity.collisionGroup == GROUP.all ) || ( otherEntity.collisionGroup == GROUP.all ) || 
-					( entity.collisionGroup != otherEntity.collisionGroup ) ) && */
-		if ( entity.overlaps( otherEntity ) ) {
-			
-			otherEntity.hitWith( entity );
-			entity.hitWith( otherEntity );
-		}
-	}	
-}
+import * as tp from './lib/toastpoint.js'
 
-let cullList = function( list: Array<Entity> ) {
-	for ( let e = list.length - 1; e > 0; e-- ) {
-		if ( list[e].removeThis ) list.splice( e, 1 );
-	}	
+function parseJSON( jsonlist: Array<object>, toaster: tp.Toaster ): Array<Entity> {
+	
+	// expects a JSON object ( list of primitives )
+	if ( !tp.checkSchema( jsonlist, 'Array_of_Primitive' ) ) {
+		throw new Error( 'PrimitiveMgr.addFromJSON: bad object ' + jsonlist );
+	}
+
+	let ents: Array<Entity> = []
+
+	// get skeleton objects
+	for ( let obj of jsonlist ) {
+		ents.push( tp.fromJSON( obj, toaster ) );
+	}
+
+	// reattach pointers
+	tp.resolveList( ents, toaster );
+
+	let output: Array<Entity> = [];
+
+	for ( let ent of ents ) {
+		if ( !ent ) continue;
+
+		try {
+			ent.init();
+			output.push( ent );
+			
+		} catch ( ex ) {
+			ent.destructor();
+			console.error( ex );
+		}
+	}
+
+	return output;
 }
 
 export class EntityManager {
@@ -54,6 +71,31 @@ export class EntityManager {
 
 	}
 
+	/* Import/Export */
+
+	// clear current primtives and load new ones
+	addFromJSON( jsonlist: Array<object>, toaster: tp.Toaster ) {
+		let newEntities = parseJSON( jsonlist, toaster );
+
+		for ( let entity of newEntities ) {
+			try {
+				this.insert( entity );
+				
+			} catch( ex ) {
+				console.log( entity );
+				throw ex;
+			}	
+		}
+	}
+
+	getJSON( toaster: tp.Toaster ): Array<object> {
+		this.insertSpawned();
+
+		return tp.listToJSON( this.entities, toaster.constructors, toaster.nameMap );
+	}
+
+	/* Update */
+
 	collide( grid: GridArea ) {
 		for ( let entity of this.entities ) {
 			entity.clearCollisionData();
@@ -64,43 +106,46 @@ export class EntityManager {
 		}
 	}
 
-	update() {
+	update( step: number ) {
 		for ( let entity of this.entities ) {
-			entity.update();
+			entity.update( step );
 		}
 	}
 		
 	cull() {
-		for ( let i = this.entities.length - 1; i >= 0; i-- ) {
-			if ( this.entities[i].removeThis ) this.entities.splice( i, 1 );
-		}
+		cullList( this.entities );
 	}
 		
-	grab() {
-		let spawnedEntities: Array<Entity> = [];
+	insertSpawned() {
+		let list = this.entities;
 
-		this.doForAllEntities( function( entity ) {
-			while( entity.hasSpawnedEntities() ) {
-				spawnedEntities.push( entity.getSpawnedEntity() );
+		while ( list.length > 0 ) {
+			let newEntities: Array<Entity> = [];
+
+			for ( let prim of this.entities ) {
+				while ( prim.spawned.length > 0 ) {
+					let spawn = prim.spawned.shift();
+
+					newEntities.push( spawn );
+				}
 			}
-		});
-			
-		this.insert( spawnedEntities );
-	}
 
-	insert( entities: Array<Entity> ) {
-		for ( let newEntity of entities ) {
-			this.entities.push( newEntity ); 
+			for ( let spawn of newEntities ) {
+				this.insert( spawn );
+			}
+
+			list = newEntities;
+			newEntities = [];
 		}
 	}
-/*
-	addSpawn( index:, object ) {
-		this.spawns[index] = object;
+
+	insert( entity: Entity ) {
+		if ( this.entities.includes( entity ) ) return;
+		
+		this.entities.push( entity );
 	}
 
-	spawn( scrollBox, level ) {
-		
-	}*/
+	/* Drawing */
 
 	draw( context: CanvasRenderingContext2D ) {
 		for ( let entity of this.entities ) {

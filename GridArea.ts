@@ -66,9 +66,7 @@ export class GridArea {
 
 	shapes: Array<Shape> = [];
 
-	constructor() {
-
-	}
+	constructor() {}
 
 	/*
 		loadFromTiledJSON
@@ -306,7 +304,7 @@ export class GridArea {
 
 					switch ( index ) {
 						case 1: // Solid
-							if ( entity.overlaps( block ) ) {
+							if ( entity.overlaps( block, 1.0 ) ) {
 								return true;
 							}
 							break;

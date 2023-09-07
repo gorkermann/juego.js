@@ -1,16 +1,9 @@
-import { Scene } from "./Scene.js"   
-import { ScrollBox } from "./ScrollBox.js"
-
 import { Mouse } from './Mouse.js'
+import { Scene } from './Scene.js'
 
 export class SessionManager {
 	currentScene: Scene = null;
-
-	scrollBox: ScrollBox = new ScrollBox( 10, 10, 32, 32 );
-
-	sceneList: Array<Scene> = []
-
-	canvas: HTMLCanvasElement;
+	sceneList: Array<Scene> = [];
 
 	mouse = new Mouse();
 
@@ -28,9 +21,7 @@ export class SessionManager {
 	}
 
 	useCanvas( canvas: HTMLCanvasElement ) {
-		this.canvas = canvas;
-
-		this.canvas.onmousemove = ( e ) => {
+		canvas.onmousemove = ( e ) => {
 			this.mouse.moveHandler( e );
 
 			this.updateCursor();

@@ -233,7 +233,7 @@ export class Shape {
 		return rayHits;	
 	}
 
-	// TODO: account for changing relAngle. Probably move this to Entity
+	// TODO: account for changing relAngle and relPos. Probably move this to Entity
 	getVel( point: Vec2 ): Vec2 {
 		if ( !this.parent ) return new Vec2( 0, 0 );
 		
@@ -247,11 +247,99 @@ export class Shape {
 		return this.parent.vel.plus( p2.minus( p ) );
 	}
 
-	draw( context: CanvasRenderingContext2D ): void {
-		context.strokeStyle = "black";
+	getArea(): number {
+		let sum = 0;
+
+		for ( let i = 0; i < this.points.length - 1; i++ ) {
+			sum += this.points[i].x * this.points[i+1].y;
+			sum -= this.points[i+1].x * this.points[i].y;
+		}
+
+		sum += this.points[this.points.length - 1].x * this.points[0].y;
+		sum -= this.points[0].x * this.points[this.points.length - 1].y;
+
+		return sum / 2;
+	}
+
+	slice( line: Line ): number {
+		let inters = [];
+		inters[this.edges.length - 1] = null;
+		inters.fill( null );
+
+		let count = 0;
+
+		// find edges which intersect the line
+		for ( let i = 0; i < this.edges.length; i++ ) {
+			let inter = this.edges[i].intersects( line, true )
+
+			if ( inter != null ) {
+				inters[i] = inter;
+				count += 1;
+			}
+		}
+
+		// remove intersections that are at point 1 of an edge
+		// (leaving the intersection at point 2 of the next edge)
+		for ( let i = 0; i < this.edges.length; i++ ) {
+			let index = ( i + this.edges.length ) % this.edges.length;
+
+			if ( inters[index] && inters[index+1] && 
+				 this.edges[index].p2.equals( inters[index] ) ) {
+
+				inters[index+1] = null;
+			}
+		}
+
+		// sort intersections in by farthest along in the direction of the line
+		let sortedInters = inters.filter( x => x )
+
+		if ( Math.abs( line.p2.x - line.p1.x ) < 0.01 ) {
+			sortedInters.sort( ( a, b ) => ( a.y - b.y ) / ( line.p2.y - line.p1.y ) );
+		} else {
+			sortedInters.sort( ( a, b ) => ( a.x - b.x ) / ( line.p2.x - line.p1.x ) );
+		}
+
+		let startIndex = inters.indexOf( sortedInters[0] );
+
+		// travel clockwise
+		let side = 1;
+		let v1 = line.p2.minus( line.p1 );
+		let v2 = this.edges[startIndex].p2.minus( inters[startIndex] );
+		if ( v1.cross( v2 ) > 0 ) side = -1;
+
+		// add area of strands to the left of the line, subtract area of strands to the right
+		let strand = [inters[startIndex]];
+		strand.push( this.edges[startIndex].p2 );
+
+		let leftArea = 0;
+
+		for ( let i = 1; i < this.edges.length + 1; i++ ) {
+			let index = ( startIndex + i + this.edges.length ) % this.edges.length;
+
+			if ( inters[index] ) {
+				strand.push( inters[index] );
+
+				let partial = Shape.fromPoints( strand );
+				if ( side > 0 ) leftArea += partial.getArea();
+				//else rightArea += partial.getArea();
+
+				side *= -1;
+				strand = [inters[index]];
+			}
+
+			strand.push( this.edges[index].p2 );
+		}
+
+		return leftArea / this.getArea();
+	}
+
+	stroke( context: CanvasRenderingContext2D ): void {
 		context.lineWidth = 1;
 
 		for ( let edge of this.edges ) {
+			context.strokeStyle = this.material.getFillStyle();
+			if ( edge.material ) context.strokeStyle = edge.material.getFillStyle();
+
 			edge.draw( context );
 		}
 	}

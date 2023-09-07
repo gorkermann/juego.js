@@ -57,10 +57,11 @@ export class Line {
 		find the point of intersection with another line
 
 		line: the other line
+		infinite: whether the other line is unbounded
 
 		returns: the intersection point, or null
 	*/ 
-	intersects( line: Line ): Vec2 | null {
+	intersects( line: Line, infinite: boolean=false ): Vec2 | null {
 		let result = null;	
 
 		let dx_this = Math.abs( this.p2.x - this.p1.x );
@@ -73,8 +74,9 @@ export class Line {
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
 			let yInt2 = line.p1.y - ( line.p1.x - this.p1.x ) * slope2;
 
-			if ( between( yInt2, this.p1.y, this.p2.y ) && between( this.p1.x, line.p1.x, line.p2.x ) &&
-				 between( yInt2, line.p1.y, line.p2.y )) {
+			if ( between( yInt2, this.p1.y, this.p2.y ) && 
+				 ( between( this.p1.x, line.p1.x, line.p2.x ) || infinite ) ) {
+				//( between( yInt2, line.p1.y, line.p2.y ) || infinite ) ) { // not necessary?
 				result = new Vec2( this.p1.x, yInt2 );
 			}
 
@@ -91,8 +93,10 @@ export class Line {
 				let intX = yInt2 / ( slope1 - slope2 ) + this.p1.x;
 				let intY = (intX - this.p1.x) * slope2 + yInt2 + this.p1.y
 
-				if ( between( intX, this.p1.x, this.p2.x ) && between( intX, line.p1.x, line.p2.x ) &&
-					 between( intY, this.p1.y, this.p2.y ) && between( intY, line.p1.y, line.p2.y ) ) {
+				if ( between( intX, this.p1.x, this.p2.x ) && 
+					 ( between( intX, line.p1.x, line.p2.x ) || infinite ) &&
+					 between( intY, this.p1.y, this.p2.y ) && 
+					 ( between( intY, line.p1.y, line.p2.y ) || infinite ) ) {
 					result = new Vec2( intX, intY );
 				}
 			}

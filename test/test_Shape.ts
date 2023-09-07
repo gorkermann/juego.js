@@ -150,6 +150,103 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.getVel( new Vec2( 0, 0 ) ), new Vec2( 1, 2 ) );
 	tf.ASSERT_EQ( s.getVel( new Vec2( 100, 0 ) ), new Vec2( 1, 2 ).plus( new Vec2( -100, 100 ) ) );
 	tf.ASSERT_EQ( s.getVel( new Vec2( 50, 0 ) ), new Vec2( 1, 2 ).plus( new Vec2( -50, 50 ) ) );
+
+	// getArea
+	p = [new Vec2( 0, 0 ),
+		 new Vec2( 100, 0 ),
+		 new Vec2( 100, 10 ),
+		 new Vec2( 0, 10 )];
+
+	s = Shape.fromPoints( p );
+
+	tf.ASSERT_EQ( s.getArea(), 1000 );
+
+	for ( let i = 0; i < 5; i++ ) {
+		let angle = Math.random() * Math.PI / 2;
+
+		for ( let point of p ) {
+			point.rotate( angle );
+		}
+
+		tf.ASSERT_EQ( s.getArea(), 1000 );
+	}
+
+	p = [new Vec2( 10, 10 ),
+		 new Vec2( 20, 10 ),
+		 new Vec2( 17, 30 )];
+	// base = 100, height = 200, area = 10000
+
+	s = Shape.fromPoints( p );
+
+	tf.ASSERT_EQ( s.getArea(), 100 );
+
+	for ( let i = 0; i < 5; i++ ) {
+		let angle = Math.random() * Math.PI / 2;
+
+		for ( let point of p ) {
+			point.rotate( angle );
+		}
+
+		tf.ASSERT_EQ( s.getArea(), 100 );
+	}
+
+	// slice
+	p = [new Vec2( 0, 0 ),
+		 new Vec2( 100, 0 ),
+		 new Vec2( 100, 100 ),
+		 new Vec2( 0, 100 )];
+
+	s = Shape.fromPoints( p );
+
+	let l = new Line( -50, 75, 150, 75 ); // outside
+	tf.ASSERT_EQ( s.slice( l ), 0.75 );
+
+	l = new Line( 150, 75, -50, 75 ); // flipped
+	tf.ASSERT_EQ( s.slice( l ), 0.25 );
+
+	l = new Line( 25, 75, 75, 75 ); // inside
+	tf.ASSERT_EQ( s.slice( l ), 0.75 );
+
+	l = new Line( 50, 75, 100, 75 ); // on line
+	tf.ASSERT_EQ( s.slice( l ), 0.75 );
+
+	l = new Line( 25, 0, 25, 100 ); // vertical
+	tf.ASSERT_EQ( s.slice( l ), 0.75 );
+
+	l = new Line( 0, 10, 100, 90 ); // slanted
+	tf.ASSERT_EQ( s.slice( l ), 0.5 );
+
+	l = new Line( 0, 0, 100, 100 ); // on points
+	tf.ASSERT_EQ( s.slice( l ), 0.5 );
+
+	l = new Line( 0, 0, 100, 0 ); // on points
+	tf.ASSERT_EQ( s.slice( l ), 0.0 );
+
+	l = new Line( 100, 0, 0, 0 ); // on points
+	tf.ASSERT_EQ( s.slice( l ), 1.0 );
+
+	/*
+		-[]--[]-
+		 [][][]
+	*/
+	p = [new Vec2( 0, 0 ),
+	     new Vec2( 10, 0 ),
+	     new Vec2( 10, 10 ),
+	     new Vec2( 20, 10 ),
+	     new Vec2( 20, 0 ),
+	     new Vec2( 30, 0 ),
+	     new Vec2( 30, 20 ),
+	     new Vec2( 0, 20 )];
+
+	s = Shape.fromPoints( p );
+
+	tf.ASSERT_EQ( s.getArea(), 500 );
+
+	l = new Line( 0, 5, 30, 5 );
+	tf.ASSERT_EQ( s.slice( l ), 0.2 );
+
+	l = new Line( 30, 5, 5, 5 );
+	tf.ASSERT_EQ( s.slice( l ), 0.8 );
 }
 
 let tests: Array<Test> = [];
@@ -163,10 +260,11 @@ tests.push( new Test( 'Shape',
 					   'makeCircle',
 					   'offset',
 					   'intersect',
-					   'rayIntersect'
-					   ],
+					   'rayIntersect',
+					   'getVel',
+					   'getArea'],
 					  ['getBoundingHeight', // hacky
-					   'draw',
+					   'stroke',
 					   'fill',
 					   'materialDraw'] ) );
 

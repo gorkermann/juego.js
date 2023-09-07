@@ -106,9 +106,9 @@ function test_Line( tf: TestFuncs ) {
 	}
 
 
-	// not crossing, same slope
-	l = new Line( 0, 0, 1, 1 );
-	l2 = new Line( 0, 1, 1, 2 );
+	// not crossing, same slope (bounding boxes overlap)
+	l = new Line( 0, 0, 2, 2 );
+	l2 = new Line( 0, 1, 2, 3 );
 
 	testIntersect( tf, l, l2,  null );
 

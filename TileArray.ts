@@ -21,10 +21,15 @@ export class TileArray {
 	collength: number;	// int
 	tiles: Array<any>;
 
-	constructor( rowlength: number, tiles: Array<any> ) {
+	constructor( rowlength: number=0, tiles: Array<any>=[] ) {
 		this.rowlength = rowlength;
 		this.tiles = tiles;
-		this.collength = this.tiles.length / this.rowlength;
+
+		if ( this.rowlength > 0 ) {
+			this.collength = this.tiles.length / this.rowlength;
+		} else {
+			this.collength = 0;
+		}
 	}
 
 	static deepcopy( data: TileArray ): TileArray {
