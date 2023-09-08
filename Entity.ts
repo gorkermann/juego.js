@@ -20,19 +20,12 @@ import { Debug } from './Debug.js'
 
 import { Shape } from './Shape.js'
 
-let LOG_COLLISION = false;
-
 let DIR = {
 	left: { X: -1, Y: 0 },
 	right: { X: 1, Y: 0 },
 	down: { X: 0, Y: 1 },
 	up: { X: 0, Y: -1 },
 };
-
-let SHAPE = {
-	rect: 0,
-	line: 1,
-}
 
 export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null ): Array<any> {
 	let result: Array<any> = [];
@@ -73,12 +66,12 @@ export class Entity {
 	height: number;
 
 	collisionGroup: number = 0;
-	collisionMask: number = 0x00; // only set for "intelligent" objects that handle collisions
+	collisionMask: number = 0x00; // only set for "intelligent" entities that handle collisions
+	//exposed: boolean = true; // whether an entity hits other entities separately from its parent
 
 	material: Material = new Material( 0, 0, 0 );
 
 	faceDir = DIR.left; 	// Facing direction
-	state: number = 0; 				// General-purpose state. Not all entities will use it
 	
 	// Collision flags. All entities have flags for collisions to the left, right, top, and bottom
 	collideRight: boolean = false; 
@@ -86,7 +79,6 @@ export class Entity {
 	collideDown: boolean = false;
 	collideUp: boolean = false;
 
-	isGhost: boolean = false;		// ghost entities do not participate in collision detection
 	isPlayer: boolean = false;		// Entity is controlled by a player
 	removeThis: boolean = false;	// Removal flag. Entities with this flag set will be removed from the game
 
@@ -99,14 +91,13 @@ export class Entity {
 	mouseHover: boolean = false;
 	mouseSelected: boolean = false;	
 
-	// For overlap testing
-	shape: number = SHAPE.rect;
-
 	drawWireframe: boolean = false;
 
-	saveFields: Array<string> = ['pos', 'vel', 'relPos', 'relAngle',
+	discardFields: Array<string> = ['center', 'mouseHover', 'mouseSelected'];
+
+	/*saveFields: Array<string> = ['pos', 'vel', 'relPos', 'relAngle',
 		'angle', 'angleVel', 'width', 'height', 'collisionGroup', 'collisionMask', 
-		'material', 'isGhost'];
+		'material', 'isGhost'];*/
 
 	constructor( pos: Vec2, width: number, height: number ) {
 		this.pos = pos;
@@ -121,14 +112,13 @@ export class Entity {
 	init() {}
 
 	toJSON( toaster: tp.Toaster ): any {
-		let fields = this.saveFields;
-		if ( fields.length == 0 ) fields = Object.keys( this );
+		let fields = Object.keys( this );
 
 		// never save these fields (which are lists of other fields)
-		for ( let banned of ['editFields', 'saveFields'] ) {
-			let index = fields.indexOf( banned );
-			if ( index >= 0 ) fields.splice( index, 1 );
-		}
+		let exclude = ['editFields', 'saveFields', 'discardFields'];
+
+		exclude = exclude.concat( this.discardFields );
+		fields = fields.filter( x => !exclude.includes( x ) );
 
 		let flat: any = {};
 
@@ -225,37 +215,7 @@ export class Entity {
 		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup );
 	}
 
-	/*overlaps ( otherEntity: Entity ) {
-		// Two upright rectangles
-		if ( this.shape == SHAPE.rect && otherEntity.shape == SHAPE.rect ) {
-			let left1 = this.pos.x + this.vel.x;
-			let left2 = otherEntity.pos.x + ( otherEntity.vel.x < 0 ? otherEntity.vel.x : 0 );
-			let right1 = left1 + this.width + this.vel.x;
-			let right2 = left2 + otherEntity.width + ( otherEntity.vel.x > 0 ? otherEntity.vel.x : 0 );
-			let top1 = this.pos.y + this.vel.y;
-			let top2 = otherEntity.pos.y + ( otherEntity.vel.y < 0 ? otherEntity.vel.y : 0 );
-			let bottom1 = top1 + this.height + this.vel.y;
-			let bottom2 = top2 + otherEntity.height + ( otherEntity.vel.y > 0 ? otherEntity.vel.y : 0 );
-			
-			if ((bottom1 > top2) &&
-				(top1 < bottom2) &&
-				(right1 > left2) &&
-				(left1 < right2)) { 
-			
-				// The two objects' collision boxes overlap
-				return true;
-			}
-		// Rectangle and a line	
-		} else if ( this.shape == SHAPE.rect && otherEntity.shape == SHAPE.line ) {
-			return false;//this.rectOverlapsLine( otherEntity );
-		} else if ( this.shape == SHAPE.line && otherEntity.shape == SHAPE.rect ) { 
-			return false;//otherEntity.rectOverlapsLine( this );
-		}
-		
-		// The two objects' collision boxes do not overlap
-		return false;
-	}*/
-	overlaps ( otherEntity: Entity, step: number ): Contact | null {
+	overlaps ( otherEntity: Entity, step: number ): Array<Contact> | null {
 		let shapes = this.getShapes( step );
 		let otherShapes = otherEntity.getShapes( step );
 
@@ -269,11 +229,16 @@ export class Entity {
 			output multiple contacts for entities with multiple shapes
 		 */
 
-		let contact: Contact = null;
-		let maxScore = 0;
+		let contacts: Array<Contact> = [];
 
 		for ( let shape of shapes ) {
 			for ( let otherShape of otherShapes ) {
+				let contact = null;
+				let maxScore = 0;
+
+				//let group = otherEntity.collisionGroup;
+				//if ( otherShape.parent.collisionGroup ) group = otherShape.parent.collisionGroup;
+
 				for ( let edge of shape.edges ) {
 					for ( let i = 0; i < otherShape.edges.length; i++ ) {
 						let point = edge.intersects( otherShape.edges[i] );
@@ -289,48 +254,39 @@ export class Entity {
 							// velocity of the contact point projected onto the contact normal
 							let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
 
+							let otherSub = otherShape.parent;
+							if ( !otherSub.collisionGroup ) otherSub = otherEntity; 
+
 							if ( !contact ) {
-								contact = new Contact( shape.parent, point, otherShape.normals[i].copy() );
+								contact = new Contact( shape.parent, 
+													   otherSub,
+													   point,
+													   otherShape.normals[i].copy() );
 								contact.vel = nvel;
 								contact.slice = slice;
 
 							} else { 
 
-								// a rotating object may create two contacts with different velocities
+								// (a rotating object may create two contacts with different velocities)
 								if ( slice > contact.slice || 
 									 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
-									contact = new Contact( shape.parent, point, otherShape.normals[i].copy() );
+									contact = new Contact( shape.parent, 
+														   otherSub,
+														   point,
+														   otherShape.normals[i].copy() );
 									contact.vel = nvel;
-									contact.slice = slice;					
+									contact.slice = slice;
 								}
 							}
 						}
 					}
 				}
+
+				if ( contact ) contacts.push( contact );
 			}
 		}
 		
-		return contact;
-	}
-
-	/*
-		rectOverlapsLine()
-		Does this rect overlap a line?
-	*/
-	rectOverlapsLine( line: Line ) {
-		var leftLine = new Line( this.pos.x, this.pos.y, this.pos.x, this.pos.y + this.height);
-		var rightLine = new Line( this.pos.x + this.width, this.pos.y, this.pos.x + this.width, this.pos.y + this.height);
-		var topLine = new Line( this.pos.x, this.pos.y, this.pos.x + this.width, this.pos.y); 
-		var bottomLine = new Line( this.pos.x, this.pos.y + this.height, this.pos.x + this.width, this.pos.y + this.height);
-
-		if ( leftLine.intersects( line ) != null || 
-			 rightLine.intersects( line ) != null ||
-			 topLine.intersects( line ) != null ||
-			 bottomLine.intersects( line ) != null ) {
-			return true;
-		}
-
-		return false;
+		return contacts;
 	}
 
 	/*
@@ -540,10 +496,6 @@ export class Entity {
 
 			context.globalAlpha = 1.0;
 		}
-	}
-
-	onClick() {
-		// empty	
 	}
 }
 		

@@ -304,7 +304,7 @@ export class GridArea {
 
 					switch ( index ) {
 						case 1: // Solid
-							if ( entity.overlaps( block, 1.0 ) ) {
+							if ( entity.overlaps( block, 1.0 ).length > 0 ) {
 								return true;
 							}
 							break;
