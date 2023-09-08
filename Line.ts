@@ -142,6 +142,35 @@ export class Line {
 		return new RayHit( intersection, normal, otherLine.material );
 	}
 
+	// check whether any of the points are on different sides of the line
+	whichSide( points: Array<Vec2> ): Array<number> {
+		let sides: Array<number> = [];
+
+		let v1 = this.p2.minus( this.p1 );
+
+		for ( let i = 0; i < points.length; i++ ) {
+			let cross = v1.cross( points[i].minus( this.p1 ) );
+
+			if ( cross < -0.01 ) {
+				sides.push( -1 );
+			} else if ( cross > 0.01 ) {
+				sides.push ( 1 );
+			} else {
+				sides.push( 0 );
+			}
+		}
+
+		return sides;
+	}
+
+	sortAlong( points: Array<Vec2> ): void {
+		if ( Math.abs( this.p2.x - this.p1.x ) < 0.01 ) {
+			points.sort( ( a, b ) => ( a.y - b.y ) / ( this.p2.y - this.p1.y ) );
+		} else {
+			points.sort( ( a, b ) => ( a.x - b.x ) / ( this.p2.x - this.p1.x ) );
+		}
+	}
+
 	draw( context: CanvasRenderingContext2D ): void {
 		context.beginPath();
 		context.moveTo( this.p1.x, this.p1.y );	

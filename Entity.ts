@@ -270,6 +270,7 @@ export class Entity {
 		 */
 
 		let contact: Contact = null;
+		let maxScore = 0;
 
 		for ( let shape of shapes ) {
 			for ( let otherShape of otherShapes ) {
@@ -284,12 +285,12 @@ export class Entity {
 
 							// velocity of the contact point
 							let vel = otherShape.getVel( point );
-	
+
 							// velocity of the contact point projected onto the contact normal
 							let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
 
 							if ( !contact ) {
-								contact = new Contact( point, otherShape.normals[i].copy() );
+								contact = new Contact( shape.parent, point, otherShape.normals[i].copy() );
 								contact.vel = nvel;
 								contact.slice = slice;
 
@@ -297,8 +298,8 @@ export class Entity {
 
 								// a rotating object may create two contacts with different velocities
 								if ( slice > contact.slice || 
-									 ( Math.abs( slice - contact.slice ) < 0.01 && vel.lengthSq() > contact.vel.lengthSq() ) ) {
-									contact = new Contact( point, otherShape.normals[i].copy() );
+									 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
+									contact = new Contact( shape.parent, point, otherShape.normals[i].copy() );
 									contact.vel = nvel;
 									contact.slice = slice;					
 								}

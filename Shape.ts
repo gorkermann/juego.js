@@ -234,7 +234,7 @@ export class Shape {
 	}
 
 	// TODO: account for changing relAngle and relPos. Probably move this to Entity
-	getVel( point: Vec2 ): Vec2 {
+	getVel( point: Vec2, step: number=1.0 ): Vec2 {
 		if ( !this.parent ) return new Vec2( 0, 0 );
 		
 		let p = point.minus( this.parent.pos );
@@ -242,7 +242,7 @@ export class Shape {
 			p.add( this.parent.relPos.turned( this.parent.angle ) );
 		}
 
-		let p2 = p.turned( this.parent.angleVel );
+		let p2 = p.turned( this.parent.angleVel * step );
 
 		return this.parent.vel.plus( p2.minus( p ) );
 	}
@@ -261,23 +261,20 @@ export class Shape {
 		return sum / 2;
 	}
 
+	forEachIndex( func: ( i: number, iNext: number ) => void, start: number=0 ) {
+		let i, iNext;
+
+		for ( let j = 0; j < this.points.length; j++ ) {
+			i = ( j + start ) % this.points.length
+			iNext = ( i + 1 ) % this.points.length;
+
+			func( i, iNext );
+		}
+	}
+
 	slice( line: Line ): number {
 		// check whether any of the points are on different sides of the line
-		let sides: Array<number> = [];
-
-		let v1 = line.p2.minus( line.p1 );
-
-		for ( let i = 0; i < this.edges.length; i++ ) {
-			let cross = v1.cross( this.edges[i].p1.minus( line.p1 ) );
-
-			if ( cross < -0.01 ) {
-				sides.push( -1 );
-			} else if ( cross > 0.01 ) {
-				sides.push ( 1 );
-			} else {
-				sides.push( 0 );
-			}
-		}
+		let sides = line.whichSide( this.points );
 
 		let leftCount = sides.filter( x => x < 0 ).length;
 		let rightCount = sides.filter( x => x > 0 ).length;
@@ -290,70 +287,58 @@ export class Shape {
 		inters.fill( null );
 
 		// find edges which intersect the line
-		for ( let i = 0; i < this.edges.length; i++ ) {
-			if ( sides[i] == sides[(i + 1) % this.edges.length] ) continue;
-
+		this.forEachIndex( ( i, iNext ) => {
+			if ( sides[i] == sides[iNext] ) return;
+			
 			let inter = this.edges[i].intersects( line, true )
 
 			if ( inter != null ) {
 				inters[i] = inter;
-			}
-		}
+			}				
+		} );
 
 		// remove intersections that are at point 1 of an edge
 		// (leaving the intersection at point 2 of the next edge)
-		for ( let i = 0; i < this.edges.length; i++ ) {
-			let index = ( i + this.edges.length ) % this.edges.length;
+		this.forEachIndex( ( i, iNext ) => {
+			if ( inters[i] && inters[iNext] && 
+				 this.edges[i].p2.equals( inters[i] ) ) {
 
-			if ( inters[index] && inters[index+1] && 
-				 this.edges[index].p2.equals( inters[index] ) ) {
-
-				inters[index+1] = null;
+				inters[iNext] = null;
 			}
-		}
+		} );
 
 		if ( inters.length == 0 ) {
-			throw new Error( 'Shape.slice: no intersections' );
+			throw new Error( 'Shape.slice: no intersections (should have returned earlier)' );
 		}
 
 		// sort intersections in by farthest along in the direction of the line
 		let sortedInters = inters.filter( x => x )
-
-		if ( Math.abs( line.p2.x - line.p1.x ) < 0.01 ) {
-			sortedInters.sort( ( a, b ) => ( a.y - b.y ) / ( line.p2.y - line.p1.y ) );
-		} else {
-			sortedInters.sort( ( a, b ) => ( a.x - b.x ) / ( line.p2.x - line.p1.x ) );
-		}
-
+		line.sortAlong( sortedInters );
 		let startIndex = inters.indexOf( sortedInters[0] );
 
-		// travel clockwise
-		let side = -1;
-		let v2 = this.edges[startIndex].p2.minus( inters[startIndex] );
-		if ( v1.cross( v2 ) > 0 ) side = 1;
-
 		// add area of strands to the left of the line, subtract area of strands to the right
-		let strand = [inters[startIndex]];
-		strand.push( this.edges[startIndex].p2 );
+		let side = line.whichSide( [this.edges[startIndex].p2] )[0];
+		if ( side == 0 ) side = -1;
 
+		let strand: Array<Vec2> = []
 		let leftArea = 0;
 
-		for ( let i = 1; i < this.edges.length + 1; i++ ) {
-			let index = ( startIndex + i + this.edges.length ) % this.edges.length;
+		this.forEachIndex( ( i, iNext ) => {
+			if ( inters[i] ) {
+				strand.push( inters[i] );
 
-			if ( inters[index] ) {
-				strand.push( inters[index] );
+				if ( strand.length >= 3 ) {
+					let partial = Shape.fromPoints( strand );
+					if ( side < 0 ) leftArea += partial.getArea();
+					//else rightArea += partial.getArea();
 
-				let partial = Shape.fromPoints( strand );
-				if ( side < 0 ) leftArea += partial.getArea();
-				//else rightArea += partial.getArea();
-
-				side *= -1;
-				strand = [inters[index]];
+					side *= -1;
+					strand = [inters[i]];
+				}
 			}
 
-			strand.push( this.edges[index].p2 );
-		}
+			strand.push( this.edges[i].p2 );
+		}, startIndex );
 
 		return leftArea / this.getArea();
 	}
@@ -370,7 +355,8 @@ export class Shape {
 	}
 
 	fill( context: CanvasRenderingContext2D ): void {
-		context.fillStyle = this.materialTop.getFillStyle();
+		context.fillStyle = this.material.getFillStyle();
+		if ( this.materialTop ) context.fillStyle = this.materialTop.getFillStyle();
 
 		context.beginPath();
 		context.moveTo( this.points[0].x, this.points[0].y );
