@@ -127,7 +127,7 @@ let defaultModules: Array<string> = [
 	'./test_Vec2.js',
 	'./test_Line.js',
 	'./test_Shape.js',
-	//'./test_Entity.js'
+	'./test_Anim.js'
 ]
 
 /*

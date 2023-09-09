@@ -255,7 +255,7 @@ export class Entity {
 							let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
 
 							let otherSub = otherShape.parent;
-							if ( !otherSub.collisionGroup ) otherSub = otherEntity; 
+							if ( !otherSub.collisionGroup ) otherSub = otherEntity;
 
 							if ( !contact ) {
 								contact = new Contact( shape.parent, 
