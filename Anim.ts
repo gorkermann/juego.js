@@ -3,21 +3,27 @@ import { Dict } from './util.js'
 
 export type MilliCountdown = number;
 
-/*type Target = {
-	value: number
-	expired?: boolean
-	expireOnCount?: MilliCountdown
-	expireOnReach?: boolean
-	expireOnOther?: Target
-}*/
+export class Chrono {
+	count: MilliCountdown;
+	interval: number;
+
+	constructor( count: MilliCountdown, interval: number ) {
+		this.count = count;
+		this.interval = interval;
+	}
+
+	reset() {
+		this.count = this.interval;
+	}
+}
 
 type AnimValue = number | boolean | Vec2 | Physical;
 type AnimTargetValue = number | boolean | Vec2;
 
 type AnimTarget = {
 	value: AnimTargetValue;
-	derivative?: number; // 0 for value, 1 for first derivative
-	expired?: boolean
+    derivative?: number; // 0 for value, 1 for first derivative
+	inProgress?: boolean
 	expireOnCount?: MilliCountdown
 	expireOnReach?: boolean
 }
@@ -32,11 +38,11 @@ export class AnimFrame {
 
 export class Physical {
 	value: Vec2;
-	d1: Vec2;
+	deriv: Vec2;
 
-	constructor( value: Vec2, d1: Vec2 ) {
+	constructor( value: Vec2, deriv: Vec2 ) {
 		this.value = value;
-		this.d1 = d1;
+		this.deriv = deriv;
 	}
 }
 
@@ -44,9 +50,11 @@ export class AnimField {
 	obj: any;
 	varname: string; // should point to an AnimValue
 	rate: number; // ignored for booleans
-	accel: number; // only used for Physicals
+	accel: number; // ignored for all but Physicals
 
 	constructor( obj: any, varname: string, rate: number=1, accel: number=0 ) {
+		if ( !obj ) return;
+
 		if ( !( varname in obj ) ) {
 			throw new Error( 'AnimValue.constructor: no field ' + varname + ' in ' + obj ); 
 		}
@@ -62,9 +70,9 @@ export class Anim {
 	fields: Dict<AnimField>;
 	stack: Array<AnimFrame> = [];
 
-	constructor( fields: Dict<AnimField>, frame: AnimFrame ) {
+	constructor( fields: Dict<AnimField>={}, frame: AnimFrame ) {
 		this.fields = fields;
-		this.pushFrame( frame );
+		if ( frame ) this.pushFrame( frame );
 	}
 
 	pushFrame( frame: AnimFrame ) {
@@ -80,7 +88,7 @@ export class Anim {
 			}
 
 			if ( frame.targets[key].expireOnReach || frame.targets[key].expireOnCount ) {
-				frame.targets[key].expired = false;
+				frame.targets[key].inProgress = true;
 			}
 		}
 
@@ -115,7 +123,7 @@ export class Anim {
 		if ( Math.abs( value - target.value ) <= field.rate * step ) {
 			value = target.value;
 
-			if ( target.expireOnReach ) target.expired = true;
+			if ( target.expireOnReach ) target.inProgress = false;
 
 		} else if ( value < target.value ) {
 			value += field.rate * step;
@@ -143,7 +151,7 @@ export class Anim {
 		if ( diff.length() <= field.rate * step ) {
 			value.set( target.value );
 
-			if ( target.expireOnReach ) target.expired = true;
+			if ( target.expireOnReach ) target.inProgress = false;
 
 		} else {
 			value.add( diff.unit().times( field.rate ) );
@@ -165,21 +173,21 @@ export class Anim {
 
 		// velocity change
 		} else if ( target.derivative == 1 ) {
-			diff = target.value.minus( phys.d1 );
+			diff = target.value.minus( phys.deriv );
 			rate = field.accel;
 		}
 
 		if ( diff.length() <= rate * step ) {
 			if ( target.derivative == 0 ) {
-				phys.d1.set( diff ); // phys.value will hit target when d1 is added
+				phys.deriv.set( diff ); // phys.value will hit target when deriv is added
 			} else if ( target.derivative == 1 ) {
-				phys.d1.set( target.value );
+				phys.deriv.set( target.value );
 			}
 
-			if ( target.expireOnReach ) target.expired = true;
+			if ( target.expireOnReach ) target.inProgress = false;
 
 		} else {
-			phys.d1.set( diff.unit().times( rate ) );
+			phys.deriv.set( diff.unit().times( rate ) );
 		}
 	}
 
@@ -195,13 +203,13 @@ export class Anim {
 			let target = frame.targets[key];
 
 			if ( !( key in this.fields ) ) {
-				target.expired = true;
+				target.inProgress = false;
 				continue;
 			}
 
 			if ( target.expireOnCount && target.expireOnCount > 0 ) {
 				target.expireOnCount -= elapsed;
-				if ( target.expireOnCount <= 0 ) target.expired = true;
+				if ( target.expireOnCount <= 0 ) target.inProgress = false;
 			}
 
 			let field = this.fields[key];
@@ -217,7 +225,7 @@ export class Anim {
 				}
 				
 				field.obj[field.varname] = target.value;
-				if ( target.expireOnReach ) target.expired = true;
+				if ( target.expireOnReach ) target.inProgress = false;
 
 			} else if ( typeof value == 'number' ) {
 				this.updateNumber( step, key, field, target );
@@ -231,15 +239,15 @@ export class Anim {
 		}
 		
 		// clean stack
-		let allExpired = true;
+		let allDone = true;
 
 		for ( let key in frame.targets ) {
-			if ( frame.targets[key].expired === false ) {
-				allExpired = false;
+			if ( frame.targets[key].inProgress ) {
+				allDone = false;
 			}
 		}
 
-		if ( allExpired && this.stack.length > 1 ) {
+		if ( allDone && this.stack.length > 1 ) {
 			this.stack.pop();
 		}
 
