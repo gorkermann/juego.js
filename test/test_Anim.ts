@@ -1,6 +1,6 @@
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
-import { Anim, AnimFrame, AnimField } from '../Anim.js'
+import { Anim, AnimFrame, AnimField, PhysField } from '../Anim.js'
 import { Vec2 } from '../Vec2.js'
 
 function test_Anim( tf: TestFuncs ) {
@@ -202,6 +202,38 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj2.a, new Vec2( 3, 3 ) );
 	tf.ASSERT_EQ( obj2.b, new Vec2( 0, -1 ) );
+
+
+	// with derivatives
+	let obj3 = {
+		p: new Vec2(),
+		dp: new Vec2()
+	}
+
+	anim = new Anim( {
+		'p': new PhysField( obj3, 'p', 'dp', 5, 0.1 ),
+	},
+	new AnimFrame( {
+		'p': { value: new Vec2( 8, 6 ) },
+	} ) );
+
+	anim.update( 1.0, 1 );
+	obj3.p.add( obj3.dp );
+
+	tf.ASSERT_EQ( obj3.dp, new Vec2( 4, 3 ) );
+	tf.ASSERT_EQ( obj3.p, new Vec2( 4, 3 ) );
+
+	anim.update( 1.0, 1 );
+	obj3.p.add( obj3.dp );
+
+	tf.ASSERT_EQ( obj3.dp, new Vec2( 4, 3 ) );
+	tf.ASSERT_EQ( obj3.p, new Vec2( 8, 6 ) );
+
+	anim.update( 1.0, 1 );
+	obj3.p.add( obj3.dp );
+
+	tf.ASSERT_EQ( obj3.dp, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( obj3.p, new Vec2( 8, 6 ) );
 }
 
 let tests: Array<Test> = [];
