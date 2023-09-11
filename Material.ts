@@ -4,11 +4,15 @@ shaders.push(
 	function( mat: Material ) {
 		let h = ( mat.hue + mat.skewH ) % 360;
 
+		let s = mat.sat + mat.skewS;
+		if ( s < 0.0 ) s = 0.0;
+		if ( s > 1.0 ) s = 1.0;
+
 		let l = mat.lum + mat.skewL;
 		if ( l < 0.0 ) l = 0.0;
-		if ( l > 1.0 ) l = 1.0
+		if ( l > 1.0 ) l = 1.0;
 
-		return 'hsl(' + h + ',' + mat.sat * 100 + '%,' + l * 100 + '%)';
+		return 'hsl(' + h + ',' + s * 100 + '%,' + l * 100 + '%)';
 	} );
 
 shaders.push( 
@@ -26,7 +30,9 @@ export class Material {
 	shaderIndex: number = 0;
 
 	skewH: number = 0.0;
+	skewS: number = 0.0; // -1.0-1.0
 	skewL: number = 0.0; // -1.0-1.0
+
 
 	constructor( hue: number, sat: number, lum: number, shaderIndex: number=0) {
 		this.hue = hue;
@@ -40,6 +46,7 @@ export class Material {
 	copy(): Material {
 		let mat = new Material( this.hue, this.sat, this.lum, this.shaderIndex );
 		mat.skewH = this.skewH;
+		mat.skewS = this.skewS;
 		mat.skewL = this.skewL;
 
 		return mat;
