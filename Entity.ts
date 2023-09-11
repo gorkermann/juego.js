@@ -49,11 +49,10 @@ export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null 
 export class Entity {
 
 	// position (top left corner of rectangle that defines entity bounds)
-	pos: Vec2;
 	center: Vec2 = new Vec2(0, 0);
 	
-	// velocity
-	vel: Vec2 = new Vec2(0, 0);
+	pos: Vec2 = new Vec2();
+	vel: Vec2 = new Vec2();
 	
 	relPos: Vec2 = null;
 	relAngle: number = 0;
@@ -93,7 +92,8 @@ export class Entity {
 
 	drawWireframe: boolean = false;
 
-	discardFields: Array<string> = ['center', 'mouseHover', 'mouseSelected'];
+	discardFields: Array<string> = ['center', 'mouseHover', 'mouseSelected',
+		'collideRight', 'collideLeft', 'collideDown', 'collideUp'];
 
 	/*saveFields: Array<string> = ['pos', 'vel', 'relPos', 'relAngle',
 		'angle', 'angleVel', 'width', 'height', 'collisionGroup', 'collisionMask', 
@@ -144,11 +144,6 @@ export class Entity {
 		this.collideLeft = false;
 		this.collideDown = false;
 		this.collideUp = false;	
-	}
-
-	// Sets velocity to zero
-	clearVel(): void {
-		this.vel.setValues(0, 0);
 	}
 
 	getShapes( step: number ): Array<Shape> {
@@ -202,7 +197,7 @@ export class Entity {
 	hitWith( otherEntity: Entity, contact: Contact ): void {}
 
 	// Move, change state, spawn stuff
-	update( step: number ): void {
+	update( step: number, elapsed: number ): void {
 		this.pos.add( this.vel.times( step ) );
 
 		this.center = this.pos.plus( new Vec2( this.width / 2, this.height / 2 ) );
@@ -287,47 +282,6 @@ export class Entity {
 		}
 		
 		return contacts;
-	}
-
-	/*
-		containedBy()
-		Does one Entity contain any of the corners of the caller?
-
-		otherEntity: another Entity
-	*/
-	containedBy( otherEntity: Entity ): boolean {
-		let topLeft = ( new Vec2( 0, 0 ) ).rotate( this.angle ).add( this.pos );
-		let topRight = ( new Vec2( this.width, 0 ) ).rotate( this.angle ).add( this.pos );
-		let bottomLeft = ( new Vec2( 0, this.height ) ).rotate( this.angle ).add( this.pos );
-		let bottomRight = ( new Vec2( this.width, this.height ) ).rotate( this.angle ).add( this.pos );
-
-		if ( otherEntity.containsPoint( topLeft ) ||
-			 otherEntity.containsPoint( topRight ) ||
-			 otherEntity.containsPoint( bottomLeft ) ||
-			 otherEntity.containsPoint( bottomRight ) ) {
-			return true;
-		}
-
-		return false;
-	}
-
-	/*
-		containsPoint()
-		Does the caller contain a particular point?
-
-		point: the point to check
-	*/
-	containsPoint( point: Vec2 ): boolean {
-		let p = point.minus( this.pos );
-		p.rotate( -this.angle ); // Why
-		p.add( this.pos );
-
-		if ( p.x >= this.pos.x && p.x <= this.pos.x + this.width &&
-			 p.y >= this.pos.y && p.y <= this.pos.y + this.height ) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/*
@@ -434,6 +388,8 @@ export class Entity {
 			}
 		}
 	}
+
+	shade() {}
 
 	/*
 		draw()

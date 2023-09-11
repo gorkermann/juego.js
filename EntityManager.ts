@@ -106,9 +106,9 @@ export class EntityManager {
 		}
 	}
 
-	update( step: number ) {
+	update( step: number, elapsed: number ) {
 		for ( let entity of this.entities ) {
-			entity.update( step );
+			entity.update( step, elapsed );
 		}
 	}
 		
@@ -146,6 +146,12 @@ export class EntityManager {
 	}
 
 	/* Drawing */
+
+	shade() {
+		for ( let entity of this.entities ) {
+			entity.shade();
+		}
+	}
 
 	draw( context: CanvasRenderingContext2D ) {
 		for ( let entity of this.entities ) {
