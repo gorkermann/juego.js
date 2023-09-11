@@ -31,7 +31,7 @@ type AnimTarget = {
 	expireOnReach?: boolean
 	reachOnCount?: MilliCountdown
 
-	setDefaultOnFinish?: boolean
+	setDefault?: boolean
 
 	overrideRate?: number;
     derivNo?: number; // 0 for value, 1 for first derivative
@@ -153,6 +153,21 @@ export class Anim {
 		} else {
 			console.warn( 'Anim.pushFrame: ignoring frame ' + JSON.stringify( frame.targets ) );
 		}
+	}
+
+	setDefault( key: string, func: ( val: AnimValue ) => AnimValue ) {
+		if ( !( key in this.fields ) ) {
+			throw new Error( 'Anim.setDefault: no field ' + key + ' in fields' ); 
+		}
+
+		let val = this.stack[0].targets[key].value;
+		let newVal = func( val );
+
+		if ( typeof val != typeof newVal ) {
+			throw new Error( 'Anim.setDefault: type mismatch for key ' + key );
+		}
+
+		this.stack[0].targets[key].value = func( val );
 	}
 
 	/*private getTarget( key: string ): AnimTarget {
@@ -338,7 +353,7 @@ export class Anim {
 					console.warn( 'Anim.update: no default for ' + key );
 				}
 
-				if ( frame.targets[key].setDefaultOnFinish ) {
+				if ( frame.targets[key].setDefault ) {
 					this.stack[0].targets[key].value = frame.targets[key].value;
 				}
 			}

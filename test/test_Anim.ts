@@ -124,7 +124,7 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.y, 1 );
 
 	anim.pushFrame( new AnimFrame( {
-		'y': { value: 0, expireOnReach: true, setDefaultOnFinish: true }
+		'y': { value: 0, expireOnReach: true, setDefault: true }
 	} ) );
 
 	anim.update( 1.0, 1 );
