@@ -87,14 +87,12 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 2 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
-	tf.ASSERT_EQ( obj.onFire, true );
 
 	// no change if elapsed=0
 	anim.update( 1.0, 0 );
 
 	tf.ASSERT_EQ( obj.x, 3 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
-	tf.ASSERT_EQ( obj.onFire, true );
 
 	// trip duration counter
 	tf.ASSERT_EQ( anim.stack.length, 2 );
@@ -103,8 +101,6 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 4 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
-	tf.ASSERT_EQ( obj.onFire, true );
-
 	tf.ASSERT_EQ( anim.stack.length, 1 );
 
 	// return to old targets
@@ -112,14 +108,12 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 3 );
 	tf.ASSERT_EQ( obj.y, 0.45 );
-	tf.ASSERT_EQ( obj.onFire, true );
 
 	// many steps pass...
 	anim.update( 6.0, 1 );
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 1 );
-	tf.ASSERT_EQ( obj.onFire, true );
 
 	// negative rate
 	anim.fields['y'].rate = -0.7; 
@@ -128,24 +122,29 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 1 );
-	tf.ASSERT_EQ( obj.onFire, true );
 
 	anim.pushFrame( new AnimFrame( {
-		'y': { value: 0, expireOnReach: true }
+		'y': { value: 0, expireOnReach: true, setDefaultOnFinish: true }
 	} ) );
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 0.3 );
-	tf.ASSERT_EQ( obj.onFire, true );
+	tf.ASSERT_EQ( anim.stack.length, 2 );
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 0 );
-	tf.ASSERT_EQ( obj.onFire, true );
+	tf.ASSERT_EQ( anim.stack.length, 1 );
 
+	tf.ASSERT_EQ( anim.stack[0].targets['y'].value, 0 )
+
+	anim.update( 1.0, 1 );
+
+	tf.ASSERT_EQ( obj.x, 1 );
+	tf.ASSERT_EQ( obj.y, 0 );
 
 	// with Vec2
 	let obj2 = {
@@ -236,6 +235,73 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj3.p, new Vec2( 8, 6 ) );
 }
 
+function test_reachOnCount( tf: TestFuncs ) {
+	let obj = {
+		x: 0,
+		y: 0,
+	}
+
+	let anim = new Anim( {
+		'x': new AnimField( obj, 'x', 1 ),
+		'y': new AnimField( obj, 'y', 0.1 ),
+	},
+	new AnimFrame( {
+		'x': { value: 1 },
+		'y': { value: 1 },
+	} ) );
+
+	anim.pushFrame( new AnimFrame( { 'x': { value: 6, reachOnCount: 10 } } ) );
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj.x, 0.6 );
+
+	anim.update( 0.5, 1 );
+	tf.ASSERT_EQ( obj.x, 1.2 ); // step shouldn't matter as long as it's not zero
+
+	anim.update( 1.1, 1 );
+	tf.ASSERT_EQ( obj.x, 1.8 );
+
+	anim.update( 1.7, 2 );
+	tf.ASSERT_EQ( obj.x, 3 );
+
+	anim.update( 0.1, 3 );
+	tf.ASSERT_EQ( obj.x, 4.8 );
+
+	anim.update( 1.0, 2 );
+	tf.ASSERT_EQ( obj.x, 6 );
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj.x, 5 ); // falling back to default
+
+	let obj2 = {
+		a: new Vec2(),
+	}
+
+	anim = new Anim( {
+		'a': new AnimField( obj2, 'a', 5 ),
+	},
+	new AnimFrame( {
+		'a': { value: new Vec2() },
+	} ) );
+
+	anim.pushFrame( new AnimFrame( { 'a': { value: new Vec2( 6, 8 ), reachOnCount: 5 } } ) );
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj2.a, new Vec2( 1.2, 1.6 ) );
+
+	anim.update( 0.5, 1 );
+	tf.ASSERT_EQ( obj2.a, new Vec2( 2.4, 3.2 ) ); // step shouldn't matter as long as it's not zero
+
+	anim.update( 1.1, 2 );
+	tf.ASSERT_EQ( obj2.a, new Vec2( 4.8, 6.4 ) );
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj2.a, new Vec2( 6, 8 ) ); 
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj2.a, new Vec2( 3, 4 ) ); // falling back to default
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Anim',
@@ -247,6 +313,11 @@ tests.push( new Test( 'Anim',
 					   'update',
 					   'Anim.function.AnimField',
 					   'Anim.function.AnimFrame'],
+					  [] ) );
+
+tests.push( new Test( 'Anim',
+					  test_reachOnCount,
+					  [],
 					  [] ) );
 
 export default tests;
