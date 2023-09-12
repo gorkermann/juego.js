@@ -18,8 +18,12 @@ export class Vec2 {
 	y: number;
 
 	constructor( x: number=0, y: number=0 ) {
+		if ( isNaN( x ) || isNaN( y ) ) {
+			throw new Error( 'Vec2.constructor: invalid arguments x=' + x + ' y=' + y );
+		}
+
 		this.x = x;
-		this.y = y;	
+		this.y = y;
 	}
 
 	toString(): string {
