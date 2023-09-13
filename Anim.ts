@@ -8,6 +8,7 @@ export type MilliCountdown = number;
 export class Chrono {
 	count: MilliCountdown;
 	interval: number;
+	active: boolean = true;
 
 	constructor( count: MilliCountdown, interval: number ) {
 		this.count = count;
@@ -58,7 +59,6 @@ export class AnimFrame {
 export class AnimField {
 	obj: any;
 	varname: string; // obj[varname]: number | Vec2
-	derivname: string = null // obj[derivname]: number | Vec2
 
 	rate: number; // ignored for booleans
 
@@ -338,6 +338,15 @@ export class Anim {
 
 			} else if ( value instanceof Vec2 ) {
 				this.updateVec2( step, elapsed, key, field, target );
+			}
+		}
+
+		// cancel velocities for physical fields we are currently ignoring
+		for ( let key in this.fields ) {
+			let field = this.fields[key];
+
+			if ( !( key in frame.targets ) && field instanceof PhysField ) {
+				field.obj[field.derivname].zero()
 			}
 		}
 		
