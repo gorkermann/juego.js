@@ -62,7 +62,7 @@ export class AnimField {
 
 	rate: number; // ignored for booleans
 
-	constructor( obj: any, varname: string, rate: number=1 ) {
+	constructor( obj: any, varname: string, rate: number=0 ) {
 		if ( !obj ) return;
 
 		if ( !( varname in obj ) ) {
@@ -107,9 +107,11 @@ export class Anim {
 	}
 
 	getRate( step: number, elapsed: number, field: AnimField, target: AnimTarget ): number {
+		let rate = 0;
+
 		// don't allow negative rates
 		if ( field.rate < 0 ) field.rate = -field.rate;
-		let rate = field.rate;
+		if ( field.rate > 0 ) rate = field.rate;
 
 		if ( target.overrideRate ) rate = target.overrideRate;
 
@@ -151,7 +153,7 @@ export class Anim {
 							 ' ' + JSON.stringify( frame.targets ) );
 			}
 		} else {
-			console.warn( 'Anim.pushFrame: ignoring frame ' + JSON.stringify( frame.targets ) );
+			console.warn( 'Anim.pushFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
 		}
 	}
 
@@ -202,7 +204,7 @@ export class Anim {
 			rate = diff * elapsed / ( target.reachOnCount + elapsed );
 		}
 
-		if ( diff <= rate ) {
+		if ( diff <= rate || !rate ) {
 			value = target.value;
 
 			if ( target.expireOnReach ) target._inProgress = false;
@@ -234,7 +236,7 @@ export class Anim {
 			rate = diff.length() * elapsed / ( target.reachOnCount + elapsed );
 		}
 
-		if ( diff.length() <= rate ) {
+		if ( diff.length() <= rate || !rate ) {
 			value.set( target.value );
 
 			if ( target.expireOnReach ) target._inProgress = false;
@@ -273,7 +275,7 @@ export class Anim {
 
 		// instantaneous acceleration
 		if ( !target.derivNo ) {
-			if ( diff.length() <= rate ) {
+			if ( diff.length() <= rate || !rate ) {
 				d1.set( diff ); // phys.value will hit target when deriv is added
 
 				if ( target.expireOnReach ) target._inProgress = false;

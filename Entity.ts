@@ -44,6 +44,11 @@ type ApplyTransformOptions = {
 	local?: boolean
 }
 
+export enum TransformOrder {
+	TRANSLATE_THEN_ROTATE = 0,
+	ROTATE_THEN_TRANSLATE
+}
+
 export class Entity {
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
@@ -53,6 +58,9 @@ export class Entity {
 	vel: Vec2 = new Vec2();
 	angle: number = 0.0;
 	angleVel: number = 0.0;	
+
+	noAdvance: boolean = false; // don't update position internally
+	transformOrder: TransformOrder = TransformOrder.TRANSLATE_THEN_ROTATE;
 
 	// Dimensions	
 	width: number;
@@ -127,11 +135,11 @@ export class Entity {
 		if ( this.removeThis ) return;
 
 		this.removeThis = true;
-		this.subDestructor();
+		this._subDestructor();
 	}
 
-	// don't call except as super.subDestructor() inside an override
-	protected subDestructor() {}
+	// don't call except as super._subDestructor() inside an override
+	protected _subDestructor() {}
 
 	// Resets collision flags
 	clearCollisionData(): void {
@@ -162,6 +170,8 @@ export class Entity {
 	}
 
 	advance( step: number ) {
+		if ( this.noAdvance ) return;
+
 		this.pos.add( this.vel.times( step ) );
 		this.angle += this.angleVel * step;
 
@@ -215,11 +225,18 @@ export class Entity {
 
 	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
 		if ( this.parent ) {
+			if ( this.transformOrder == TransformOrder.ROTATE_THEN_TRANSLATE ) {
+				p.rotate( this.angle + this.angleVel * step );
+			}
+
 			if ( !options.angleOnly ) {
 				p.add( this.pos );
 				p.add( this.vel.times( step ) );
 			}
-			p.rotate( this.angle + this.angleVel * step );
+
+			if ( this.transformOrder == TransformOrder.TRANSLATE_THEN_ROTATE ) {
+				p.rotate( this.angle + this.angleVel * step );
+			}
 
 			if ( !options.local && this.parent ) this.parent.applyTransform( p, step, options );
 
@@ -238,10 +255,17 @@ export class Entity {
 		if ( this.parent ) {
 			this.parent.unapplyTransform( p, step, options );
 
-			p.rotate( -this.angle - this.angleVel * step );
+			if ( this.transformOrder == TransformOrder.TRANSLATE_THEN_ROTATE ) {
+				p.rotate( -this.angle - this.angleVel * step );
+			}
+
 			if ( !options.angleOnly ) {
 				p.sub( this.pos );
 				p.sub( this.vel.times( step ) );
+			}
+
+			if ( this.transformOrder == TransformOrder.ROTATE_THEN_TRANSLATE ) {
+				p.rotate( -this.angle - this.angleVel * step );
 			}
 
 		} else {
