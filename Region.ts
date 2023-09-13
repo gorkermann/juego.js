@@ -8,10 +8,10 @@
 
 import { Debug } from './Debug.js'
 import { Contact } from './Contact.js'
-import { Entity } from './Entity.js'
+import { Entity, TopLeftEntity } from './Entity.js'
 import { Vec2 } from './Vec2.js'
 
-export class Region extends Entity {
+export class Region extends TopLeftEntity {
 	containsPlayer: boolean = false;
 	playerPos: Vec2 = new Vec2( 0, 0 );
 

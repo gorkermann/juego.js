@@ -233,18 +233,23 @@ export class Shape {
 		return rayHits;	
 	}
 
-	// TODO: account for changing relAngle and relPos. Probably move this to Entity
 	getVel( point: Vec2, step: number=1.0 ): Vec2 {
 		if ( !this.parent ) return new Vec2( 0, 0 );
-		
-		let p = point.minus( this.parent.pos );
+
+		let p = this.parent.unapplyTransform( point.copy(), 0.0 );
+		let p2 = this.parent.applyTransform( p.copy(), 1.0 );
+
+		return p2.minus( point );
+
+		// old calculation
+		/*let p = point.minus( this.parent.pos );
 		if ( this.parent.relPos ) {
 			p.add( this.parent.relPos.turned( this.parent.angle ) );
 		}
 
-		let p2 = p.turned( this.parent.angleVel * step );
+		let p2 = p.turned( this.parent.angleVel * step );*/
 
-		return this.parent.vel.plus( p2.minus( p ) );
+		//return this.parent.vel.plus( p2.minus( p ) );
 	}
 
 	getArea(): number {

@@ -20,13 +20,6 @@ import { Debug } from './Debug.js'
 
 import { Shape } from './Shape.js'
 
-let DIR = {
-	left: { X: -1, Y: 0 },
-	right: { X: 1, Y: 0 },
-	down: { X: 0, Y: 1 },
-	up: { X: 0, Y: -1 },
-};
-
 export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null ): Array<any> {
 	let result: Array<any> = [];
 
@@ -46,31 +39,33 @@ export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null 
 	return result;
 }
 
-export class Entity {
+type ApplyTransformOptions = {
+	angleOnly?: boolean,
+	local?: boolean
+}
 
-	// position (top left corner of rectangle that defines entity bounds)
-	center: Vec2 = new Vec2(0, 0);
-	
+export class Entity {
+	parent: Entity = null;
+	_subs: Array<Entity> = [];
+
+	// relative to parent if parent set (position is applied before rotation)
 	pos: Vec2 = new Vec2();
 	vel: Vec2 = new Vec2();
-	
-	relPos: Vec2 = null;
-	relAngle: number = 0;
-
 	angle: number = 0.0;
-	angleVel: number = 0.0;
+	angleVel: number = 0.0;	
 
 	// Dimensions	
 	width: number;
 	height: number;
 
-	collisionGroup: number = 0;
-	collisionMask: number = 0x00; // only set for "intelligent" entities that handle collisions
-	//exposed: boolean = true; // whether an entity hits other entities separately from its parent
+	isGhost: boolean = false; // don't generate shapes for ghosts (don't draw or collide)
+	collisionGroup: number = 0; 
+
+	// Entity accepts collisions from these groups
+	// only set for "intelligent" entities that handle collisions
+	collisionMask: number = 0x00; 
 
 	material: Material = new Material( 0, 0, 0 );
-
-	faceDir = DIR.left; 	// Facing direction
 	
 	// Collision flags. All entities have flags for collisions to the left, right, top, and bottom
 	collideRight: boolean = false; 
@@ -92,10 +87,10 @@ export class Entity {
 
 	drawWireframe: boolean = false;
 
-	discardFields: Array<string> = ['center', 'mouseHover', 'mouseSelected',
+	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
 		'collideRight', 'collideLeft', 'collideDown', 'collideUp'];
 
-	/*saveFields: Array<string> = ['pos', 'vel', 'relPos', 'relAngle',
+	/*saveFields: Array<string> = ['pos', 'vel',
 		'angle', 'angleVel', 'width', 'height', 'collisionGroup', 'collisionMask', 
 		'material', 'isGhost'];*/
 
@@ -146,24 +141,40 @@ export class Entity {
 		this.collideUp = false;	
 	}
 
-	getShapes( step: number ): Array<Shape> {
-		let shape = Shape.makeRectangle( this.pos, this.width, this.height );
-		let translate = this.pos.plus( new Vec2( this.width / 2, this.height / 2 ) );
-		//shape.edges[0].material = 'red';
-		//shape.edges[2].material = 'red';
-
-		for ( let p of shape.points ) {
-			p.sub( translate );
+	addSub( entity: Entity ) {
+		if ( !this._subs.includes( entity ) ) {
+			this._subs.push( entity );
 		}
 
-		for ( let p of shape.points ) {
-			p.rotate( this.angle + this.angleVel * step );
+		entity.parent = this;
+	}
+
+	getSubs(): Array<Entity> {
+		return this._subs;
+	}
+
+	cull() {
+		for ( let sub of this.getSubs() ) {
+			sub.cull();
 		}
 
-		for ( let p of shape.points ) {
-			p.add( translate );
-			p.add( this.vel.times( step ) );
+		cullList( this._subs );
+	}
+
+	advance( step: number ) {
+		this.pos.add( this.vel.times( step ) );
+		this.angle += this.angleVel * step;
+
+		for ( let sub of this.getSubs() ) {
+			sub.advance( step );
 		}
+	}
+
+	getOwnShapes(): Array<Shape> {
+		if ( this.isGhost ) return [];
+
+		let shape = Shape.makeRectangle( 
+				new Vec2( -this.width / 2, -this.height / 2), this.width, this.height );
 
 		shape.material = this.material;
 		shape.parent = this;
@@ -171,18 +182,27 @@ export class Entity {
 		return [shape];
 	}
 
-	// Turn to face left if facing right, turn to face right if facing left
-	turnAround(): void {
-		if (this.faceDir == DIR.left) this.faceDir = DIR.right;
-		else if (this.faceDir == DIR.right) this.faceDir = DIR.left;
+	// don't override! override getOwnShapes instead
+	getShapes( step: number=0.0 ): Array<Shape> {
+		let shapes: Array<Shape> = [];
 
-		if ( this.faceDir == DIR.up ) this.faceDir = DIR.down;
-		else if ( this.faceDir == DIR.down ) this.faceDir = DIR.up;
-	}		
+		shapes = this.getOwnShapes();
 
-	faceTowards( otherEntity: Entity ): void {
-		if ( otherEntity.pos.x < this.pos.x ) this.faceDir = DIR.left;
-		else this.faceDir = DIR.right;
+		for ( let sub of this.getSubs() ) {
+			shapes.push( ...sub.getShapes( step ) );
+		}
+
+		for ( let shape of shapes ) {
+			for ( let p of shape.points ) {
+				this.applyTransform( p, step, { local: true } );
+			}
+
+			for ( let n of shape.normals ) {
+				this.applyTransform( n, step, { local: true, angleOnly: true } );
+			}
+		}
+
+		return shapes;
 	}
 
 	// Add an entity to the spawn queue. It will later be added to the game
@@ -193,14 +213,72 @@ export class Entity {
 		this.spawned.push( newEntity );
 	}
 
+	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( this.parent ) {
+			if ( !options.angleOnly ) {
+				p.add( this.pos );
+				p.add( this.vel.times( step ) );
+			}
+			p.rotate( this.angle + this.angleVel * step );
+
+			if ( !options.local && this.parent ) this.parent.applyTransform( p, step, options );
+
+		} else {
+			p.rotate( this.angle + this.angleVel * step );
+			if ( !options.angleOnly ) {
+				p.add( this.pos );
+				p.add( this.vel.times( step ) );
+			}
+		}
+
+		return p;
+	}
+
+	unapplyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( this.parent ) {
+			this.parent.unapplyTransform( p, step, options );
+
+			p.rotate( -this.angle - this.angleVel * step );
+			if ( !options.angleOnly ) {
+				p.sub( this.pos );
+				p.sub( this.vel.times( step ) );
+			}
+
+		} else {
+			if ( !options.angleOnly ) {
+				p.sub( this.pos );
+				p.sub( this.vel.times( step ) );
+			}
+			p.rotate( -this.angle - this.angleVel * step );
+		}
+
+		return p;
+	}
+
+	hitWithMultiple( otherEntity: Entity, contacts: Array<Contact> ): void {
+		let rootsHit = false;
+
+		if ( contacts.length > 0 ) {
+			for ( let contact of contacts ) {
+				if ( contact.sub == this && contact.otherSub == otherEntity ) {
+					if ( !rootsHit ) {
+						rootsHit = true;
+					} else {
+						continue;
+					}
+				}
+				
+				this.hitWith( contact.otherSub, contact );
+			}
+		}
+	}
+
 	// Some other entity has overlapped this one, do something
 	hitWith( otherEntity: Entity, contact: Contact ): void {}
 
 	// Move, change state, spawn stuff
 	update( step: number, elapsed: number ): void {
 		this.pos.add( this.vel.times( step ) );
-
-		this.center = this.pos.plus( new Vec2( this.width / 2, this.height / 2 ) );
 
 		this.angle += this.angleVel * step;
 	}
@@ -210,7 +288,7 @@ export class Entity {
 		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup );
 	}
 
-	overlaps ( otherEntity: Entity, step: number ): Array<Contact> | null {
+	overlaps ( otherEntity: Entity, step: number ): Array<Contact> {
 		let shapes = this.getShapes( step );
 		let otherShapes = otherEntity.getShapes( step );
 
@@ -231,47 +309,47 @@ export class Entity {
 				let contact = null;
 				let maxScore = 0;
 
+				let sub = shape.parent;
+				if ( !sub.collisionGroup ) sub = this;
+
 				//let group = otherEntity.collisionGroup;
 				//if ( otherShape.parent.collisionGroup ) group = otherShape.parent.collisionGroup;
 
 				for ( let edge of shape.edges ) {
 					for ( let i = 0; i < otherShape.edges.length; i++ ) {
 						let point = edge.intersects( otherShape.edges[i] );
+						if ( !point ) continue;
 
-						// The two objects' collision boxes overlap
-						if ( point ) {
+						let slice = shape.slice( otherShape.edges[i] );
 
-							let slice = shape.slice( otherShape.edges[i] );
+						// velocity of the contact point
+						let vel = otherShape.getVel( point );
 
-							// velocity of the contact point
-							let vel = otherShape.getVel( point );
+						// velocity of the contact point projected onto the contact normal
+						let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
 
-							// velocity of the contact point projected onto the contact normal
-							let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
+						let otherSub = otherShape.parent;
+						if ( !otherSub.collisionGroup ) otherSub = otherEntity;
 
-							let otherSub = otherShape.parent;
-							if ( !otherSub.collisionGroup ) otherSub = otherEntity;
+						if ( !contact ) {
+							contact = new Contact( sub, 
+												   otherSub,
+												   point,
+												   otherShape.normals[i].copy() );
+							contact.vel = nvel;
+							contact.slice = slice;
 
-							if ( !contact ) {
-								contact = new Contact( shape.parent, 
+						} else { 
+
+							// (a rotating object may create two contacts with different velocities)
+							if ( slice > contact.slice || 
+								 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
+								contact = new Contact( sub, 
 													   otherSub,
 													   point,
 													   otherShape.normals[i].copy() );
 								contact.vel = nvel;
 								contact.slice = slice;
-
-							} else { 
-
-								// (a rotating object may create two contacts with different velocities)
-								if ( slice > contact.slice || 
-									 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
-									contact = new Contact( shape.parent, 
-														   otherSub,
-														   point,
-														   otherShape.normals[i].copy() );
-									contact.vel = nvel;
-									contact.slice = slice;
-								}
 							}
 						}
 					}
@@ -308,7 +386,6 @@ export class Entity {
 		this.vel.y = 0;
 		this.collideDown = true;
 	}
-
 
 	/*
 		collideWith()
@@ -389,7 +466,11 @@ export class Entity {
 		}
 	}
 
-	shade() {}
+	shade() {
+		for ( let sub of this.getSubs() ) {
+			sub.shade();
+		}
+	}
 
 	/*
 		draw()
@@ -406,7 +487,7 @@ export class Entity {
 			//context.font = "bold 20px arial";
 			//context.fillText( this.state, this.pos.x, this.pos.y );
 
-			context.translate( this.pos.x + this.width / 2, this.pos.y + this.height / 2 );
+			context.translate( this.pos.x, this.pos.y );
 			context.rotate( this.angle );
 			context.fillRect( -this.width / 2, -this.height / 2, this.width, this.height );
 			//context.fillRect( this.pos.x, this.pos.y, this.width, this.height );
@@ -454,4 +535,57 @@ export class Entity {
 		}
 	}
 }
-		
+
+/*
+	TopLeftEntity
+
+	Entity, but drawn from the top left corner with no rotation
+ */
+export class TopLeftEntity extends Entity {
+	constructor( pos: Vec2, width: number, height: number ) {
+		super( pos, width, height );
+	}
+
+	getOwnShapes(): Array<Shape> {
+		let shape = Shape.makeRectangle( new Vec2(), this.width, this.height );
+
+		shape.material = this.material;
+		shape.parent = this;
+
+		return [shape];
+	}
+
+	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( !options.angleOnly ) {
+			p.add( this.pos );
+			p.add( this.vel.times( step ) );
+		}
+
+		if ( this.parent && !options.local ) {
+			this.parent.applyTransform( p, step, options );
+		}
+
+		return p;
+	}
+
+	unapplyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( this.parent ) {
+			this.parent.unapplyTransform( p, step, options );
+		}
+
+		if ( !options.angleOnly ) {
+			p.sub( this.pos );
+			p.sub( this.vel.times( step ) );
+		}
+
+		return p;
+	}
+
+	draw( context: CanvasRenderingContext2D ) {
+		context.fillStyle = this.material.getFillStyle();
+
+		context.save();
+			context.fillRect( this.pos.x, this.pos.y, this.width, this.height );
+		context.restore();
+	}
+}

@@ -112,7 +112,7 @@ export class GridArea {
 				pos.setValues( c * this.tileWidth, r * this.tileHeight );
 
 				if ( index > 0 ) {
-					let shape = Shape.makeRectangle( pos.copy(), 
+					let shape = Shape.makeRectangle( pos.minus( new Vec2( this.tileWidth / 2, this.tileHeight / 2 ) ),
 													 this.tileWidth,
 													 this.tileHeight );
 
