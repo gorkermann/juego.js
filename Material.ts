@@ -29,7 +29,7 @@ shaders.push(
 		return { 
 			h: mat.hue,
 			s: mat.sat - Math.random() * 0.0,
-			l: mat.lum + Math.random() * 0.2,
+			l: mat.lum + Math.random() * 0.3,
 			a: mat.alpha,
 		} 
 	} );
