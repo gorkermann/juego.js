@@ -22,3 +22,18 @@ export function between( val: number, u1: number, u2: number ) {
 	return ( ( val >= u1 - fudge && val <= u2 + fudge ) || 
 			 ( val >= u2 - fudge && val <= u1 + fudge ) );
 }
+
+export function discreteAccelDist( v1: number, a: number, v2: number ) {
+	// position change after n steps = nv1 - n(n+1)a/2
+	// n = (v1-v2)/a
+	// n = (v1-0)/a = v1/a when stopping
+
+	if ( a == 0 ) {
+		throw new Error( 'Anim.discreteAccelDist: zero acceleration' );
+	}
+
+	if ( a < 0 ) a = -a;
+
+	let n = Math.abs( ( v1 - v2 ) / a );
+	return n*v1 - n*(n + 1)*a / 2;
+}

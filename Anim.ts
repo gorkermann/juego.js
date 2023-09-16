@@ -18,6 +18,14 @@ export class Chrono {
 	reset() {
 		this.count = this.interval;
 	}
+
+	update( elapsed: number ) {
+		if ( this.active && this.count > 0 ) {
+			this.count -= elapsed;
+		}
+
+		if ( this.count < 0 ) this.count = 0;
+	}
 }
 
 type AnimValue = number | boolean | Vec2;
@@ -61,8 +69,9 @@ export class AnimField {
 	varname: string; // obj[varname]: number | Vec2
 
 	rate: number; // ignored for booleans
+	downrate: number
 
-	constructor( obj: any, varname: string, rate: number=0 ) {
+	constructor( obj: any, varname: string, rate: number=0, downrate?: number ) {
 		if ( !obj ) return;
 
 		if ( !( varname in obj ) ) {
@@ -72,6 +81,12 @@ export class AnimField {
 		this.obj = obj;
 		this.varname = varname;
 		this.rate = Math.abs( rate );
+
+		if ( downrate === undefined ) {
+			this.downrate = this.rate;
+		} else {
+			this.downrate = downrate;
+		}
 	}
 }
 
@@ -289,7 +304,8 @@ export class Anim {
 			// continuous physics ( tv - t^2 / 2 * a = d )
 			// let stopDist = d1.length() ** 2 / ( 2 * field.accel );
 
-			// discrete physics ( nv - n(n+1)a/2 = d )
+			// discrete physics stopDist = ( nv - n(n+1)a/2 = d )
+			// 
 
 		}
 	}
