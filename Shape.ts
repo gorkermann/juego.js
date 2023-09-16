@@ -6,11 +6,17 @@
 	A polygon (a single, non-self-intersecting closed loop of line segments)
  */
 
+import { Contact } from './Contact.js'
 import { Entity } from "./Entity.js"
 import { Vec2 } from "./Vec2.js"
 import { Line } from "./Line.js"
 import { Material } from './Material.js'
 import { RayHit, closestTo } from "./RayHit.js"
+import { between } from './util.js'
+
+type WorldPoint = Vec2
+type LocalPoint = Vec2
+type Dir = Vec2
 
 /*
 	getTurnAngle
@@ -34,9 +40,9 @@ export enum LoopDir {
 export class Shape {
 	parent: Entity = null;
 
-	points: Array<Vec2> = [];
+	points: Array<LocalPoint> = [];
 	edges: Array<Line> = [];
-	normals: Array<Vec2> = [];
+	normals: Array<Dir> = [];
 
 	material: Material = new Material( 0, 0, 0 );
 	materialTop: Material = null;
@@ -130,12 +136,12 @@ export class Shape {
 	}
 
 	// Make a rectangle
-	static makeRectangle( pos: Vec2, w: number, h: number ): Shape {
+	static makeRectangle( topLeft: Vec2, w: number, h: number ): Shape {
 		let shape: Shape = Shape.fromPoints( 
-				[ pos.copy(),
-			 	  new Vec2( pos.x + w, pos.y ),
-				  new Vec2( pos.x + w, pos.y + h ),
-				  new Vec2( pos.x, pos.y + h ) ], LoopDir.CW );
+				[ topLeft.copy(),
+			 	  new Vec2( topLeft.x + w, topLeft.y ),
+				  new Vec2( topLeft.x + w, topLeft.y + h ),
+				  new Vec2( topLeft.x, topLeft.y + h ) ], LoopDir.CW );
 
 		return shape;
 	}
@@ -151,6 +157,43 @@ export class Shape {
 		}
 
 		return Shape.fromPoints( points, LoopDir.CW );
+	}
+
+	static getMinMax( points: Array<Vec2> ): [Vec2, Vec2] {
+		if ( points.length == 0 ) {
+			throw new Error( 'Shape.getMinMax: no points provided' );
+		}
+
+		let min = points[0].copy();
+		let max = points[0].copy();
+
+		for ( let point of points ) {
+			if ( point.x < min.x ) min.x = point.x;
+			if ( point.y < min.y ) min.y = point.y;
+			if ( point.x > max.x ) max.x = point.x;
+			if ( point.y > max.y ) max.y = point.y;
+		}
+
+		return [min, max];
+	}
+
+	static getBoundingWidth( points: Array<Vec2> ): number {
+		let [min, max] = Shape.getMinMax( points );
+
+		return max.x - min.x;
+	}
+
+	static getBoundingHeight( points: Array<Vec2> ): number {
+		let [min, max] = Shape.getMinMax( points );
+
+		return max.y - min.y;
+	}
+
+	static getBoundingBox( points: Array<Vec2> ): Shape {
+		let [min, max] = Shape.getMinMax( points );
+
+		return Shape.fromPoints( [min, new Vec2( max.x, min.y ),
+								  max, new Vec2( min.x, max.y ) ] );
 	}
 
 	offset( offset: Vec2 ): Shape {
@@ -176,18 +219,6 @@ export class Shape {
 		inters.sort( function( a, b ) { return a.distToSq( line.p1 ) - b.distToSq( line.p1 ) } );
 
 		return inters;
-	}
-
-	getBoundingHeight(): number {
-		let min = null;
-		let max = null;
-
-		for ( let point of this.points ) {
-			if ( min === null || point.y < min ) min = point.y;
-			if ( max === null || point.y > max ) max = point.y;
-		}
-
-		return max - min; 
 	}
 
 	rayIntersect( ray: Line ): Array<RayHit> {
@@ -233,10 +264,141 @@ export class Shape {
 		return rayHits;	
 	}
 
+	getTransformedBBox( step: number ): Shape {
+		let bbox = Shape.getBoundingBox( this.points );
+
+		if ( !this.parent ) return bbox;
+
+		for ( let point of bbox.points ) {
+			this.parent.applyTransform( point, step ); 
+		}
+
+		for ( let normal of this.normals ) { 
+			this.parent.applyTransform( normal, step, { angleOnly: true } );
+		}
+
+		return bbox;
+	}
+
+	vertIntersectCount( point: LocalPoint, y: number ) {
+		let testLine = Line.fromPoints( point, new Vec2( point.x, y ) );
+		let count = 0;
+
+		for ( let edge of this.edges ) {
+			if ( !between( point.x, edge.p1.x, edge.p2.x ) ) continue;
+
+			if ( testLine.intersects( edge ) ) {
+				count += 1;
+			}
+		}
+
+		return count;
+	}
+
+	contains( point: WorldPoint, step: number=0.0, doTransform: boolean=true ): boolean {
+		let p: LocalPoint = point.copy();
+
+		if ( this.parent && doTransform ) {
+			this.parent.unapplyTransform( p, step );
+		}
+
+		let [min, max] = Shape.getMinMax( this.points );
+
+		if ( p.x < min.x ||
+			 p.y < min.y || 
+			 p.x > max.x || 
+			 p.y > max.y ) {
+			return false;
+		}
+
+		// vertical line pointing up, second point outside shape
+		if ( this.vertIntersectCount( p, min.y - 5 ) % 2 == 1 ) { 
+			return true;
+		}
+
+		// if the point is on an edge the above check may fail
+		// ex: point is on bottom edge of rectangle. 
+		// 	   1 intersection for point, 1 for crossing top edge, 2 % 2 = 0
+
+		// vertical line pointing down, second point outside shape
+		if ( this.vertIntersectCount( p, max.y + 5 ) % 2 == 1 ) { 
+			return true;
+		}
+
+		return false;
+	}
+
+	getShapeContact( otherShape: Shape ): Contact | null {
+		let contact: Contact = null;
+		let inters: Array<Vec2> = [];
+
+		// no points from other shape inside this one
+		for ( let edge of this.edges ) {
+			for ( let i = 0; i < otherShape.edges.length; i++ ) {
+				let point = edge.intersects( otherShape.edges[i] );
+
+				if ( !point ) continue;
+
+				inters.push( point );
+			}
+		}
+
+		// inters.length == 0 means no contact
+		// inters.length == 1 means one corner of the other shape is right on an edge of this one
+		if ( inters.length < 2 ) return null;
+		if ( inters[0].equals( inters[1] ) ) return null;
+
+		// TODO: linear regression to find normal
+		let slice = this.slice( Line.fromPoints( inters[0], inters[1] ) );
+
+		let normal = inters[1].minus( inters[0] ).normalize();
+		if ( slice > 0.5 ) {
+			normal.rotate( -Math.PI / 2 )	
+		} else {
+			normal.rotate( Math.PI / 2 );
+		}
+
+		if ( inters.length > 2 ) console.log( 'oh boy' );
+
+		let point = inters[0];
+		let vel = otherShape.getVel( point ); // should use step here?
+		let vel2 = otherShape.getVel( inters[1] );
+
+		// a rotating object may create multiple contacts with different velocities
+		if ( vel2.lengthSq() > vel.lengthSq() ) {
+			point = inters[1];
+			vel = vel2;
+		}
+
+		// velocity of the contact point projected onto the contact normal
+		let nvel = normal.times( vel.dot( normal ) );
+
+		// create contact
+		if ( !contact ) {
+			contact = new Contact( null, null,
+								   point,
+								   normal );
+			contact.vel = nvel;
+			contact.slice = slice;
+
+		} else { 
+			if ( slice > contact.slice || 
+				 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
+				contact = new Contact( null, null,
+									   point,
+									   normal );
+				contact.vel = nvel;
+				contact.slice = slice;
+			}
+		}
+
+		return contact;		
+	}
+
 	getVel( point: Vec2, step: number=1.0 ): Vec2 {
 		if ( !this.parent ) return new Vec2( 0, 0 );
 
-		let p = this.parent.unapplyTransform( point.copy(), 0.0 );
+		let p: LocalPoint = this.parent.unapplyTransform( point.copy(), 0.0 );
 		let p2 = this.parent.applyTransform( p.copy(), 1.0 );
 
 		return p2.minus( point );

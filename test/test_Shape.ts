@@ -15,6 +15,7 @@ function testIntersect( tf: TestFuncs, l1: Line, l2: Line, point: Vec2 ) {
 }
 
 function test_Shape( tf: TestFuncs ) {
+
 	// fromPoints
 	// copy
 	let p: Array<Vec2> = [new Vec2( 0, 0 ),
@@ -189,14 +190,36 @@ function test_Shape( tf: TestFuncs ) {
 
 		tf.ASSERT_EQ( s.getArea(), 100 );
 	}
+}
+
+let tests: Array<Test> = [];
+
+tests.push( new Test( 'Shape',
+					  test_Shape,
+					  ['constructor',
+					   'copy',
+					   'fromPoints',
+					   'makeRectangle',
+					   'makeCircle',
+					   'offset',
+					   'intersect',
+					   'rayIntersect',
+					   'getVel',
+					   'getArea'],
+					  ['stroke',
+					   'fill',
+					   'materialDraw'] ) );
+
+
+function test_ShapeSlice( tf: TestFuncs ) {
 
 	// slice
-	p = [new Vec2( 0, 0 ),
+	let p = [new Vec2( 0, 0 ),
 		 new Vec2( 100, 0 ),
 		 new Vec2( 100, 100 ),
 		 new Vec2( 0, 100 )];
 
-	s = Shape.fromPoints( p );
+	let s = Shape.fromPoints( p );
 
 	let l = new Line( -50, 75, 150, 75 ); // through
 	tf.ASSERT_EQ( s.slice( l ), 0.75 );
@@ -241,7 +264,6 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.slice( l ), 0.0 );
 
 
-
 	/*
 		-[]--[]-
 		 [][][]
@@ -266,23 +288,81 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.slice( l ), 0.8 ); // flipped
 }
 
-let tests: Array<Test> = [];
+tests.push( new Test( 'Shape',
+					  test_ShapeSlice,
+					  ['slice'], 
+					  [] ) );
+
+function test_ShapeContains( tf: TestFuncs ) {
+	let s = Shape.makeRectangle( new Vec2( -5, 0 ), 10, 40 );
+
+	let [min, max] = Shape.getMinMax( s.points );
+
+	tf.ASSERT_EQ( min, new Vec2( -5, 0 ) );
+	tf.ASSERT_EQ( max, new Vec2( 5, 40 ) );
+
+	tf.ASSERT( s.contains( new Vec2( 0, 20 ) ) ); // middle
+
+	tf.ASSERT( s.contains( new Vec2( 0, 0 ) ) ); // on edges
+	tf.ASSERT( s.contains( new Vec2( 5, 20 ) ) );
+	tf.ASSERT( s.contains( new Vec2( 0, 40 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -5, 20 ) ) );
+
+	tf.ASSERT( s.contains( new Vec2( -5, 0 ) ) ); // on corners
+	tf.ASSERT( s.contains( new Vec2( 5, 0 ) ) );
+	tf.ASSERT( s.contains( new Vec2( 5, 40 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -5, 40 ) ) );
+	
+	tf.ASSERT( !s.contains( new Vec2( 10, 20 ) ) ); // outside
+	tf.ASSERT( !s.contains( new Vec2( 0, 50 ) ) ); // below
+
+	let e = new Entity( new Vec2( 0, 0 ), 10, 10 );
+	s.parent = e;
+
+	// adding parent has no effect yet, since these are in the Shape's local frame
+	[min, max] = Shape.getMinMax( s.points );
+
+	tf.ASSERT_EQ( min, new Vec2( -5, 0 ) );
+	tf.ASSERT_EQ( max, new Vec2( 5, 40 ) );
+
+	tf.ASSERT( s.contains( new Vec2( 0, 20 ) ) );
+	tf.ASSERT( !s.contains( new Vec2( -20, 0 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -2, 2 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -5, 5 ) ) );
+	tf.ASSERT( !s.contains( new Vec2( -40, 5 ) ) );
+
+	// rotate the parent
+	e.angle = Math.PI / 2;
+	[min, max] = Shape.getMinMax( s.points );
+
+	tf.ASSERT_EQ( min, new Vec2( -5, 0 ) );
+	tf.ASSERT_EQ( max, new Vec2( 5, 40 ) );
+
+	tf.ASSERT( !s.contains( new Vec2( 0, 20 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -20, 0 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -2, 2 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -5, 5 ) ) );
+	tf.ASSERT( s.contains( new Vec2( -40, 5 ) ) );
+
+	// random entity orientations
+	for ( let i = 0; i < 10; i++ ) {
+		e.angle = Math.random() * Math.PI * 2;
+		e.pos.x += -5 + Math.random() * 5;
+		e.pos.y += -20 + Math.random() * 20;
+
+		let p = new Vec2( -5 + Math.random() * 10, 0 + Math.random() * 40 );
+ 
+		e.applyTransform( p );
+
+		tf.ASSERT( s.contains( p ) );
+	}
+}
 
 tests.push( new Test( 'Shape',
-					  test_Shape,
-					  ['constructor',
-					   'copy',
-					   'fromPoints',
-					   'makeRectangle',
-					   'makeCircle',
-					   'offset',
-					   'intersect',
-					   'rayIntersect',
-					   'getVel',
-					   'getArea'],
-					  ['getBoundingHeight', // hacky
-					   'stroke',
-					   'fill',
-					   'materialDraw'] ) );
+					  test_ShapeContains,
+					  ['getMinMax',
+					   'contains',
+					   'vertIntersectCount'], 
+					  [] ) );
 
 export default tests;

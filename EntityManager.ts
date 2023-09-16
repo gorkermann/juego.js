@@ -113,6 +113,10 @@ export class EntityManager {
 	}
 		
 	cull() {
+		for ( let entity of this.entities ) {
+			entity.cull();
+		}
+
 		cullList( this.entities );
 	}
 		

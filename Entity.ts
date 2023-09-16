@@ -49,6 +49,18 @@ export enum TransformOrder {
 	ROTATE_THEN_TRANSLATE
 }
 
+class Vortex {
+	pos: Vec2;
+	life: number;
+	material: Material;
+
+	constructor( pos: Vec2, life: number, material: Material ) {
+		this.pos = pos;
+		this.life = life;
+		this.material = material;
+	}
+}
+
 export class Entity {
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
@@ -224,6 +236,14 @@ export class Entity {
 	}
 
 	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( p == this.pos ) {
+			throw new Error( 'Entity.applyTransform: Attempting to transform entity\'s own position' );
+		}
+
+		if ( p == this.vel ) {
+			throw new Error( 'Entity.applyTransform: Attempting to transform entity\'s own velocity' );
+		}
+
 		if ( this.parent ) {
 			if ( this.transformOrder == TransformOrder.ROTATE_THEN_TRANSLATE ) {
 				p.rotate( this.angle + this.angleVel * step );
@@ -252,6 +272,14 @@ export class Entity {
 	}
 
 	unapplyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+		if ( p == this.pos ) {
+			throw new Error( 'Entity.unapplyTransform: Attempting to transform entity\'s own position' );
+		}
+
+		if ( p == this.vel ) {
+			throw new Error( 'Entity.unapplyTransform: Attempting to transform entity\'s own velocity' );
+		}
+
 		if ( this.parent ) {
 			this.parent.unapplyTransform( p, step, options );
 
@@ -308,8 +336,8 @@ export class Entity {
 	}
 
 	// Check if this entity's bounding rectangle overlaps another entity's bounding rectangle
-	canOverlap ( otherEntity: Entity ) {
-		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup );
+	canBeHitBy ( otherEntity: Entity ): boolean {
+		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup ) > 0;
 	}
 
 	overlaps ( otherEntity: Entity, step: number ): Array<Contact> {
@@ -336,50 +364,18 @@ export class Entity {
 				let sub = shape.parent;
 				if ( !sub.collisionGroup ) sub = this;
 
-				//let group = otherEntity.collisionGroup;
-				//if ( otherShape.parent.collisionGroup ) group = otherShape.parent.collisionGroup;
+				let otherSub = otherShape.parent;
+				if ( !otherSub.collisionGroup ) otherSub = otherEntity;
 
-				for ( let edge of shape.edges ) {
-					for ( let i = 0; i < otherShape.edges.length; i++ ) {
-						let point = edge.intersects( otherShape.edges[i] );
-						if ( !point ) continue;
+				if ( !sub.canBeHitBy( otherSub ) ) continue;
 
-						let slice = shape.slice( otherShape.edges[i] );
+				contact = shape.getShapeContact( otherShape );
 
-						// velocity of the contact point
-						let vel = otherShape.getVel( point );
-
-						// velocity of the contact point projected onto the contact normal
-						let nvel = otherShape.normals[i].times( vel.dot( otherShape.normals[i] ) );
-
-						let otherSub = otherShape.parent;
-						if ( !otherSub.collisionGroup ) otherSub = otherEntity;
-
-						if ( !contact ) {
-							contact = new Contact( sub, 
-												   otherSub,
-												   point,
-												   otherShape.normals[i].copy() );
-							contact.vel = nvel;
-							contact.slice = slice;
-
-						} else { 
-
-							// (a rotating object may create two contacts with different velocities)
-							if ( slice > contact.slice || 
-								 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
-								contact = new Contact( sub, 
-													   otherSub,
-													   point,
-													   otherShape.normals[i].copy() );
-								contact.vel = nvel;
-								contact.slice = slice;
-							}
-						}
-					}
+				if ( contact ) {
+					contact.sub = sub;
+					contact.otherSub = otherSub;
+					contacts.push( contact );
 				}
-
-				if ( contact ) contacts.push( contact );
 			}
 		}
 		
