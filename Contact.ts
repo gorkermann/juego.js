@@ -7,6 +7,7 @@ export class Contact {
 	point: Vec2; // point of contact (intersection of two shape edges)
 	normal: Vec2; // to surface of other entity
 	vel: Vec2 = new Vec2(); // at point on other entity
+	inters: Array<Vec2> = [];
 	//group: number;
 
 	// portion of primary entity which is outside of the contacted edge of the other entity

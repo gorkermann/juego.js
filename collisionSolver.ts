@@ -1,3 +1,4 @@
+import { Contact } from './Contact.js'
 import { Entity } from './Entity.js'
 import { Vec2 } from './Vec2.js'
 
@@ -9,9 +10,27 @@ if ( typeof window != 'undefined' ) {
 	context = ( window as any ).context;
 }
 
+function pushUnique<Type>( newObj: Type, list: Array<Type>, compare: ( a: Type, b: Type ) => boolean ) {
+	for ( let obj of list ) {
+		if ( compare( newObj, obj ) ) return;
+	}
+
+	list.push( newObj );
+}
+
+function solverDirCompare( dir1: SolverDir, dir2: SolverDir ) {
+	return dir1.dir.equals( dir2.dir );
+}
+
+export type SolverDir = {
+	dir: Vec2,
+	contact: Contact
+}
+
 export type SolverResult = {
 	blockedDirs: Array<Vec2>,
-	crushed: boolean
+	crushed: boolean,
+	crusher: Entity
 }
 
 export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>, solidMask: number, step: number ): SolverResult {
@@ -19,8 +38,8 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let lastTotal = 0.0;
 	let contacted: Entity = null;
 	let shapes = [];
-	let blockedDirs: Array<Vec2> = [];
-	let pushDirs: Array<Vec2> = [];
+	let blockedDirs: Array<SolverDir> = [];
+	let pushDirs: Array<SolverDir> = [];
 
 	while ( stepTotal < step ) {
 		let partialStep = step - stepTotal;
@@ -67,26 +86,16 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 		} // debug draw
 
 		for ( let contact of solidContacts ) {
-
-			// blocked directions
-			let anyEqual = false;
-
-			for ( let dir of blockedDirs ) {
-				if ( dir.equals( contact.normal ) ) {
-					anyEqual = true;
-					break;
-				}
-			}
-
-			if ( !anyEqual ) {
-				blockedDirs.push( contact.normal.copy() );
-			}
 			
+			//pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
+
 			// player hits something, cancel player velocity in object direction
 			let ndot = entity.vel.dot( contact.normal );
 			let before = entity.vel.copy();
 
-			if ( ndot < 0 ) {
+			if ( ndot <= 0 ) {
+				pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
+
 				let advance = stepTotal;// - lastTotal;
 				if ( advance < 0.05 ) advance = 0; // at wall, running into wall, don't move at all
 
@@ -103,7 +112,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			let v2 = contact.vel.unit();
 
 			if ( v1.dot( v2 ) > 0 ) {
-				push.sub( v2.times( v1.dot( v2 ) ) );	
+				push.sub( contact.vel.times( v1.dot( v2 ) ) );
 			}
 			
 			let ahead = entity.pos.minus( contact.point ).dot( push ) > 0;
@@ -111,18 +120,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				entity.vel.add( push.times( step - stepTotal ) );
 
 				// potential crush directions
-				anyEqual = false;
-				let pushDir = contact.vel.unit();
-
-				for ( let dir of pushDirs ) {
-					if ( dir.equals( pushDir ) ) {
-						anyEqual = true;
-					}
-				}
-
-				if ( !anyEqual ) {
-					pushDirs.push( pushDir );
-				}
+				pushUnique( { dir: contact.vel.unit(), contact: contact }, pushDirs, solverDirCompare );
 			}
 		}
 
@@ -130,13 +128,17 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	}
 
 	let crushed = false;
+	let crusher = null;
 	for ( let dir of pushDirs ) {
 		for ( let otherDir of blockedDirs ) {
 			if ( otherDir == dir ) continue;
 
-			if ( otherDir.dot( dir ) < -0.95 ) crushed = true;
+			if ( otherDir.dir.dot( dir.dir ) < -0.95 ) {
+				crushed = true;
+				crusher = dir.contact.otherSub;
+			}
 		}
 	}
 
-	return { blockedDirs: blockedDirs, crushed: crushed };
+	return { blockedDirs: blockedDirs.map( x => x.dir ), crushed: crushed, crusher: crusher };
 }

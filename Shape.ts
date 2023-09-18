@@ -31,6 +31,8 @@ function getTurnAngle( l1: Line, l2: Line ) {
 	return Math.asin( v1.cross( v2 ) );
 }
 
+let VEL_EPSILON = 0.0001
+
 export enum LoopDir {
 	CW = 1,
 	CCW,
@@ -338,7 +340,19 @@ export class Shape {
 				let point = edge.intersects( otherShape.edges[i] );
 				if ( !point ) continue;
 
-				inters.push( point );
+				/* 
+					adding this filter seems to obviate the crush glitch with LockRing 
+				
+					if two points are very close together, the line between then can cause
+					weird results from slice, and then sometimes flipped normals
+				*/
+				let anyEqual = false;
+
+				for ( let inter of inters ) {
+					if ( point.equals( inter, 0.001 ) ) anyEqual = true;
+				}
+
+				if ( !anyEqual ) inters.push( point );
 			}
 		}
 
@@ -347,8 +361,7 @@ export class Shape {
 			inters.length == 1 means either:
 
 				one corner of either shape is right on an edge of the other one,
-				and one of the points has been rejected as an intersection, 
-				likely due to a floating point error
+				and one of the intersections has been rejected
 
 				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
 		*/
@@ -356,6 +369,8 @@ export class Shape {
 		if ( inters[0].equals( inters[1] ) ) return null;
 
 		// TODO: linear regression to find normal
+		// or at least use the two points farthest apart, throw out similar points
+		// if single corner point, use the flipped normal of the other edge
 		let slice = this.slice( Line.fromPoints( inters[0], inters[1] ) );
 
 		let normal = inters[1].minus( inters[0] ).normalize();
@@ -369,9 +384,10 @@ export class Shape {
 
 		let point = inters[0];
 		let vel = otherShape.getVel( point ); // should use step here?
-		let vel2 = otherShape.getVel( inters[1] );
 
 		// a rotating object may create multiple contacts with different velocities
+		let vel2 = otherShape.getVel( inters[1] );
+
 		if ( vel2.lengthSq() > vel.lengthSq() ) {
 			point = inters[1];
 			vel = vel2;
@@ -381,23 +397,12 @@ export class Shape {
 		let nvel = normal.times( vel.dot( normal ) );
 
 		// create contact
-		if ( !contact ) {
-			contact = new Contact( null, null,
-								   point,
-								   normal );
-			contact.vel = nvel;
-			contact.slice = slice;
-
-		} else { 
-			if ( slice > contact.slice || 
-				 ( Math.abs( slice - contact.slice ) < 0.01 && nvel.lengthSq() > contact.vel.lengthSq() ) ) {
-				contact = new Contact( null, null,
-									   point,
-									   normal );
-				contact.vel = nvel;
-				contact.slice = slice;
-			}
-		}
+		contact = new Contact( null, null,
+							   point,
+							   normal );
+		contact.vel = nvel;
+		contact.slice = slice;
+		contact.inters = inters;
 
 		return contact;		
 	}
@@ -408,7 +413,12 @@ export class Shape {
 		let p: LocalPoint = this.parent.unapplyTransform( point.copy(), 0.0 );
 		let p2 = this.parent.applyTransform( p.copy(), 1.0 );
 
-		return p2.minus( point );
+		let v = p2.minus( point );
+
+		if ( Math.abs( v.x ) < VEL_EPSILON ) v.x = 0;
+		if ( Math.abs( v.y ) < VEL_EPSILON ) v.y = 0;
+
+		return v;
 
 		// old calculation
 		/*let p = point.minus( this.parent.pos );
@@ -429,8 +439,8 @@ export class Shape {
 			sum -= this.points[i+1].x * this.points[i].y;
 		}
 
-		sum += this.points[this.points.length - 1].x * this.points[0].y;
-		sum -= this.points[0].x * this.points[this.points.length - 1].y;
+		sum += this.points.slice( -1 )[0].x * this.points[0].y;
+		sum -= this.points[0].x * this.points.slice( -1 )[0].y;
 
 		return sum / 2;
 	}
