@@ -28,7 +28,7 @@ export class Chrono {
 	}
 }
 
-type AnimValue = number | boolean | Vec2;
+type AnimValue = number | boolean | Vec2 | string;
 
 type AnimTarget = {
 	value: AnimValue;
@@ -48,6 +48,7 @@ type AnimTarget = {
 
 export class AnimFrame {
 	targets: Dict<AnimTarget>;
+	thread: number = 0;
 
 	constructor( targets: Dict<AnimTarget> ) {
 		this.targets = targets;
@@ -133,7 +134,7 @@ export class Anim {
 		return rate * step;
 	}
 
-	pushFrame( frame: AnimFrame ) {
+	startFrame( frame: AnimFrame ): boolean {
 		for ( let key in frame.targets ) {
 			if ( !( key in this.fields ) ) {
 				throw new Error( 'Anim.pushFrame: no field ' + key + ' in fields' ); 
@@ -161,6 +162,32 @@ export class Anim {
 		}
 
 		if ( frame.inProgress() || this.stack.length == 0 ) {
+			return true;
+
+		} else {
+			return false
+		}
+	}
+
+	unshiftFrame( frame: AnimFrame ) {
+		if ( this.startFrame( frame ) ) {
+			if ( this.stack.length == 0 ) {
+				this.stack.push( frame );	
+			} else {
+				this.stack.splice( 1, 0, frame );
+			}
+
+			if ( Debug.LOG_ANIM ) {
+				console.log( this.name + ': pushed frame ' + (this.stack.length - 1) + 
+							 ' ' + JSON.stringify( frame.targets ) );
+			}
+		} else {
+			console.warn( 'Anim.unshiftFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
+		}
+	}
+
+	pushFrame( frame: AnimFrame ) {
+		if ( this.startFrame( frame ) ) {
 			this.stack.push( frame );
 
 			if ( Debug.LOG_ANIM ) {
@@ -186,20 +213,6 @@ export class Anim {
 
 		this.stack[0].targets[key].value = func( val );
 	}
-
-	/*private getTarget( key: string ): AnimTarget {
-		let target = null;
-
-		if ( this.stack.length > 0 ) {
-			let frame = this.stack[this.stack.length - 1];
-
-			if ( key in frame.targets ) {
-				target = frame.targets[key];
-			}
-		}
-
-		return target;
-	}*/
 
 	updateNumber( step: number, elapsed: number, key: string, field: AnimField, target: AnimTarget ) {
 		if ( typeof target.value != 'number' ) {
@@ -229,6 +242,38 @@ export class Anim {
 
 		} else { // value > target.value
 			value -= rate;
+		}
+
+		field.obj[field.varname] = value;
+	}
+
+	updateString( step: number, elapsed: number, key: string, field: AnimField, target: AnimTarget ) {
+		if ( typeof target.value != 'string' ) {
+			throw new Error( 'Anim.update: expected number target for field ' + key );
+		}
+
+		let value = field.obj[field.varname] as string;
+		let rate = this.getRate( step, elapsed, field, target );
+
+		if ( target.value.indexOf( value ) < 0 ) {
+			value = '';
+		}
+
+		let diff = Math.abs( target.value.length - value.length );
+
+		if ( target.reachOnCount + elapsed > 0 ) {
+			rate = diff * elapsed / ( target.reachOnCount + elapsed );
+		}
+
+		rate = Math.floor( rate );
+
+		if ( diff <= rate || !rate ) {
+			value = target.value;
+
+			if ( target.expireOnReach ) target._inProgress = false;
+		
+		} else {
+			value = target.value.slice( 0, value.length + rate );
 		}
 
 		field.obj[field.varname] = value;
@@ -315,7 +360,7 @@ export class Anim {
 		
 		let prevLength = this.stack.length;
 
-		let frame = this.stack[this.stack.length - 1];
+		let frame = this.stack.slice( -1 )[0];
 
 		// update
 		for ( let key in frame.targets ) {
@@ -350,6 +395,9 @@ export class Anim {
 
 			} else if ( typeof value == 'number' ) {
 				this.updateNumber( step, elapsed, key, field, target );
+
+			} else if ( typeof value == 'string' ) {
+				this.updateString( step, elapsed, key, field, target );
 
 			} else if ( field instanceof PhysField ) {
 				this.updatePhysical( step, elapsed, key, field, target );

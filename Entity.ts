@@ -107,6 +107,8 @@ export class Entity {
 
 	drawWireframe: boolean = false;
 
+	flavorName: string = 'ENTITY';
+
 	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
 		'collideRight', 'collideLeft', 'collideDown', 'collideUp'];
 
