@@ -167,7 +167,6 @@ function test_EntityOverlap( tf: TestFuncs ) {
 	tf.ASSERT_EQ( contacts[0].sub, e1 );
 	tf.ASSERT_EQ( contacts[0].otherSub, e2 );
 
-	// these are wrong right now since whole edges being inside a shape doesn't register a contact
 	// don't check slice? that might not belong in Contact
 	tf.ASSERT_EQ( contacts[0].vel, new Vec2( 10, 0 ) ); // velocity comes from second object
 	tf.ASSERT_EQ( contacts[0].normal, new Vec2( -1, 0 ) ); // both points of left edge of e2 are inside e1

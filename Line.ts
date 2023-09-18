@@ -68,7 +68,7 @@ export class Line {
 		let dx_line = Math.abs( line.p2.x - line.p1.x );
 
 		if ( dx_this < 0.01 && dx_line < 0.01 ) {
-			// both vertical do nothing, return null
+			// both vertical, do nothing, return null
 
 	 	} else if ( dx_this < 0.01 ) {
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
