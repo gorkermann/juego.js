@@ -336,15 +336,22 @@ export class Shape {
 		for ( let edge of this.edges ) {
 			for ( let i = 0; i < otherShape.edges.length; i++ ) {
 				let point = edge.intersects( otherShape.edges[i] );
-
 				if ( !point ) continue;
 
 				inters.push( point );
 			}
 		}
 
-		// inters.length == 0 means no contact
-		// inters.length == 1 means one corner of the other shape is right on an edge of this one
+		/*
+			inters.length == 0 means no contact
+			inters.length == 1 means either:
+
+				one corner of either shape is right on an edge of the other one,
+				and one of the points has been rejected as an intersection, 
+				likely due to a floating point error
+
+				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
+		*/
 		if ( inters.length < 2 ) return null;
 		if ( inters[0].equals( inters[1] ) ) return null;
 
@@ -455,13 +462,13 @@ export class Shape {
 
 		// find edges which intersect the line
 		this.forEachIndex( ( i, iNext ) => {
-			if ( sides[i] == sides[iNext] ) return;
+			if ( sides[i] != 0 && sides[iNext] != 0 && sides[i] == sides[iNext] ) return;
 			
 			let inter = this.edges[i].intersects( line, true )
 
 			if ( inter != null ) {
 				inters[i] = inter;
-			}				
+			}
 		} );
 
 		// remove intersections that are at point 1 of an edge
@@ -474,18 +481,19 @@ export class Shape {
 			}
 		} );
 
-		if ( inters.length == 0 ) {
-			throw new Error( 'Shape.slice: no intersections (should have returned earlier)' );
+		// sort intersections in by farthest along in the direction of the line
+		let sortedInters = inters.filter( x => x !== null );
+
+		if ( sortedInters.length == 0 ) {
+			throw new Error( 'Shape.slice: no intersections' );
 		}
 
-		// sort intersections in by farthest along in the direction of the line
-		let sortedInters = inters.filter( x => x )
 		line.sortAlong( sortedInters );
 		let startIndex = inters.indexOf( sortedInters[0] );
 
 		// add area of strands to the left of the line, subtract area of strands to the right
-		let side = line.whichSide( [this.edges[startIndex].p2] )[0];
-		if ( side == 0 ) side = -1;
+		let side = 0;//line.whichSide( [this.edges[startIndex].p2] )[0];
+		//if ( side == 0 ) side = -1;
 
 		let strand: Array<Vec2> = []
 		let leftArea = 0;
@@ -499,10 +507,13 @@ export class Shape {
 					if ( side < 0 ) leftArea += partial.getArea();
 					//else rightArea += partial.getArea();
 
-					side *= -1;
+					//side *= -1;
 					strand = [inters[i]];
 				}
 			}
+
+			let s = sides[iNext];//line.whichSide( [this.edges[i].p2] )[0];
+			if ( s != 0 ) side = s;
 
 			strand.push( this.edges[i].p2 );
 		}, startIndex );
