@@ -376,12 +376,13 @@ export class Anim {
 			for ( let key in frame.targets ) {
 				if ( !( key in this.fields ) ) continue;
 
-				if ( !( key in this.stack[0].targets ) ) {
-					console.warn( 'Anim.update: no default for ' + key );
-				}
-
 				if ( frame.targets[key].setDefault ) {
-					this.stack[0].targets[key].value = frame.targets[key].value;
+					if ( !( key in this.stack[0].targets ) ) {
+						console.warn( 'Anim.update: no default target for ' + key );
+					
+					} else {
+						this.stack[0].targets[key].value = frame.targets[key].value;
+					}
 				}
 			}
 
