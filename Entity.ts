@@ -507,19 +507,18 @@ export class Entity {
 	*/
 	draw( context: CanvasRenderingContext2D ) {
 		context.fillStyle = this.material.getFillStyle();
+		context.strokeStyle = 'black';
+		context.lineWidth = 1;
 
-		context.save();
-			
-			//context.fillStyle = "black";
-			//context.font = "bold 20px arial";
-			//context.fillText( this.state, this.pos.x, this.pos.y );
+		let shapes = this.getShapes( 0.0 );
 
-			context.translate( this.pos.x, this.pos.y );
-			context.rotate( this.angle );
-			context.fillRect( -this.width / 2, -this.height / 2, this.width, this.height );
-			//context.fillRect( this.pos.x, this.pos.y, this.width, this.height );
-			//this.drawCollisionBox( context );
-		context.restore();
+		for ( let shape of shapes ) {
+			if ( this.drawWireframe ) {
+				shape.stroke( context );
+			} else {
+				shape.fill( context );
+			}
+		}
 	}
 
 	/*
