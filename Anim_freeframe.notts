@@ -47,25 +47,31 @@ type AnimTarget = {
 	expireOnCount?: MilliCountdown
 	expireOnReach?: boolean
 	reachOnCount?: MilliCountdown
+	expireOnStack?: boolean
 
 	readOnly?: boolean // Anim doesn't update the value, only checks for completeness
 
 	setDefault?: boolean // update the frame at Anim.stack[0] on completion
 
 	overrideRate?: number; // override the rate from the AnimField
-	isSpin?: boolean; // overrides isAngle and allows an angle to go greater than [-pi, pi]
     derivNo?: number; // 0 for value, 1 for first derivative
+}
+
+export enum Pass {
+	FREE_FIELDS = 0,
+	ALL_OTHER_FIELDS,
+	NONE,
 }
 
 export class AnimFrame {
 	targets: Dict<AnimTarget>;
 	funcs: Array<AnimFunc>;
-	tag: string;
-	delay: MilliCountdown;
+	pass: Pass;
 
-	constructor( targets: Dict<AnimTarget>, funcs: Array<AnimFunc> = [] ) {
+	constructor( targets: Dict<AnimTarget>, funcs: Array<AnimFunc> = [], pass: Pass=Pass.FREE_FIELDS ) {
 		this.targets = targets;
 		this.funcs = funcs;
+		this.pass = pass;
 	}
 
 	inProgress(): boolean {
@@ -99,7 +105,8 @@ function getRate( step: number, elapsed: number, targetKey: string, field: AnimF
 }
 
 type AnimFieldOptions = {
-	isAngle?: boolean;
+	isFree?: boolean;
+	isAngle?: boolean
 	downrate?: number;
 	accel?: number;
 }
@@ -108,6 +115,7 @@ export class AnimField {
 	obj: any;
 	varname: string; // obj[varname]: number | Vec2 | boolean
 
+	isFree: boolean;
 	isAngle: boolean;
 
 	rate: number;
@@ -120,12 +128,14 @@ export class AnimField {
 			throw new Error( 'AnimField.constructor: no field ' + varname + ' in ' + obj ); 
 		}
 
+		if ( options.isFree === undefined ) options.isFree = false;
 		if ( options.isAngle === undefined ) options.isAngle = false;
 
 		this.obj = obj;
 		this.varname = varname;
 		this.rate = Math.abs( rate );
 
+		this.isFree = options.isFree;
 		this.isAngle = options.isAngle;
 	}
 }
@@ -225,9 +235,7 @@ export class PhysField extends AnimField {
 
 		let diff = d0 - target.value;
 
-		if ( this.isAngle && !target.isSpin ) {
-			this.obj[this.varname] = normalizeAngle( this.obj[this.varname] );
-			d0 = this.obj[this.varname];
+		if ( this.isAngle ) {
 			target.value = normalizeAngle( target.value );
 			diff = normalizeAngle( diff );
 		}
@@ -271,16 +279,6 @@ function normalizeAngle( angle: number ): number {
 	if ( angle < -Math.PI) angle += Math.PI * 2;
 
 	return angle;
-}
-
-type PushFrameOptions = {
-	tag?: string;
-	delay?: MilliCountdown;
-}
-
-type ClearOptions = {
-	withTag?: string;
-	withoutTag?: string;
 }
 
 export class Anim {
@@ -368,6 +366,11 @@ export class Anim {
 			if ( !( key in this.fieldGroups ) ) continue; 
 
 			for ( let fieldKey of this.fieldGroups[key] ) {
+				if ( fieldKey in frame.targets ) {
+					console.warn( 'Anim.initFrame: duplicate target ' + fieldKey + ' in group ' + key + ', ignoring' );
+					continue;
+				}
+
 				let copy = Object.assign( {}, frame.targets[key] );
 				addTargets[fieldKey] = copy;
 			}
@@ -376,14 +379,7 @@ export class Anim {
 		}
 
 		for ( let key of removeKeys ) delete frame.targets[key];
-		for ( let key in addTargets ) {
-			if ( key in frame.targets ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(duplicate target ' + key + ')' );
-				return false;
-			}
-
-			frame.targets[key] = addTargets[key];
-		}
+		for ( let key in addTargets ) frame.targets[key] = addTargets[key];
 
 		// init targets
 		for ( let key in frame.targets ) {
@@ -392,16 +388,15 @@ export class Anim {
 			this.initTargetObj( key, target );
 
 			if ( target.expireOnCount < 0 ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(negative expireOnCount)' );
-				return false;
+				console.warn( 'Anim.pushFrame: negative expireOnCount, ignoring frame' );
 			}
 
 			if ( target.reachOnCount < 0 ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(negative reachOnCount)' );
-				return false;
+				console.warn( 'Anim.pushFrame: negative reachOnCount, ignoring frame' );
 			}
 
 			if ( target.expireOnReach || 
+				 target.expireOnStack ||
 				 target.expireOnCount > 0 ||
 				 target.reachOnCount > 0 ) {
 				target._inProgress = true;
@@ -423,24 +418,37 @@ export class Anim {
 			return true;
 
 		} else {
-			console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
-			return false;
+			return false
 		}
 	}
 
-	pushFrame( frame: AnimFrame, options: PushFrameOptions={} ) {
-		if ( options.delay === undefined || options.delay < 0 ) options.delay = 0;
-
+	unshiftFrame( frame: AnimFrame ) {
 		if ( this.initFrame( frame ) ) {
-			if ( options.tag ) frame.tag = options.tag; 
-			frame.delay = options.delay;
+			if ( this.stack.length == 0 ) {
+				this.stack.push( frame );	
+			} else {
+				this.stack.splice( 1, 0, frame );
+			}
 
+			if ( Debug.LOG_ANIM ) {
+				console.log( this.name + ': pushed frame ' + (this.stack.length - 1) + 
+							 ' ' + JSON.stringify( frame.targets ) );
+			}
+		} else {
+			console.warn( 'Anim.unshiftFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
+		}
+	}
+
+	pushFrame( frame: AnimFrame ) {
+		if ( this.initFrame( frame ) ) {
 			this.stack.push( frame );
 
 			if ( Debug.LOG_ANIM ) {
 				console.log( this.name + ': pushed frame ' + (this.stack.length - 1) + 
 							 ' ' + JSON.stringify( frame.targets ) );
 			}
+		} else {
+			console.warn( 'Anim.pushFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
 		}
 	}
 
@@ -501,8 +509,7 @@ export class Anim {
 
 			let diff = value - target.value;
 
-			if ( field.isAngle && !target.isSpin ) {
-				value = normalizeAngle( value );
+			if ( field.isAngle ) {
 				target.value = normalizeAngle( target.value );
 				diff = normalizeAngle( diff );
 			}
@@ -622,82 +629,94 @@ export class Anim {
 
 		//let frame = this.stack.slice( -1 )[0];
 
+		let blockedFields: Dict<boolean> = {};
 		let physUpdated: Dict<boolean> = {};
 
-		// update
 		let topIndex = this.stack.length - 1;
+
+		// update
 		for ( let i = this.stack.length - 1; i >= 0; i-- ) {
-			if ( this.stack[i].delay > 0 ) continue;
+			let frame = this.stack[i];
 
-			topIndex = i;
-			break;
-		}
+			for ( let key in frame.targets ) {
+				if ( key in blockedFields ) continue;
 
-		for ( let frame of this.stack ) {
-			if ( frame.delay > 0 ) frame.delay -= elapsed;
-		}
+				let target = frame.targets[key];
+				let fieldKey = key.split( '.' )[0];
+				let field = this.fields[fieldKey];
 
-		let frame = this.stack[topIndex];
-
-		for ( let key in frame.targets ) {
-			let target = frame.targets[key];
-			let fieldKey = key.split( '.' )[0];
-			let field = this.fields[fieldKey];
-
-			if ( target.expireOnCount && target.expireOnCount > 0 ) {
-				target.expireOnCount -= elapsed;
-				if ( target.expireOnCount <= 0 ) target._inProgress = false;
-			}
-
-			if ( target.reachOnCount && target.reachOnCount > 0 ) {
-				target.reachOnCount -= elapsed;
-				if ( target.reachOnCount <= 0 ) target._inProgress = false;	
-			}
-
-			let value = this.getValue( field, key );
-
-			if ( typeof value == 'boolean' ) {
-				if ( typeof target.value != 'boolean' ) {
-					throw new Error( 'Anim.update: expected boolean target for field ' + key );
-				}
-				
-				if ( !target.readOnly ) {
-					this.setValue( field, key, target.value );
-				}
-
-				if ( this.getValue( field, key ) == target.value && target.expireOnReach ) {
+				if ( target.expireOnStack && i == topIndex ) {
 					target._inProgress = false;
 				}
 
-			} else if ( field instanceof PhysField ) {
-				this.updatePhysical( step, elapsed, key, field, target );
+				if ( target.expireOnCount && target.expireOnCount > 0 ) {
+					target.expireOnCount -= elapsed;
+					if ( target.expireOnCount <= 0 ) target._inProgress = false;
+				}
 
-				physUpdated[key] = true;
+				if ( target.reachOnCount && target.reachOnCount > 0 ) {
+					target.reachOnCount -= elapsed;
+					if ( target.reachOnCount <= 0 ) target._inProgress = false;	
+				}
 
-			} else if ( typeof value == 'number' ) {
-				this.updateNumber( step, elapsed, key, field, target );
+				let value = this.getValue( field, key );
 
-			} else if ( typeof value == 'string' ) {
-				this.updateString( step, elapsed, key, field, target );
+				if ( typeof value == 'boolean' ) {
+					if ( typeof target.value != 'boolean' ) {
+						throw new Error( 'Anim.update: expected boolean target for field ' + key );
+					}
+					
+					if ( !target.readOnly ) {
+						this.setValue( field, key, target.value );
+					}
 
-			} else if ( value instanceof Vec2 ) {
-				this.updateVec2( step, elapsed, key, field, target );
+					if ( this.getValue( field, key ) == target.value && target.expireOnReach ) {
+						target._inProgress = false;
+					}
+
+				} else if ( field instanceof PhysField ) {
+					this.updatePhysical( step, elapsed, key, field, target );
+
+					physUpdated[key] = true;
+
+				} else if ( typeof value == 'number' ) {
+					this.updateNumber( step, elapsed, key, field, target );
+
+				} else if ( typeof value == 'string' ) {
+					this.updateString( step, elapsed, key, field, target );
+
+				} else if ( value instanceof Vec2 ) {
+					this.updateVec2( step, elapsed, key, field, target );
+				}
 			}
-		}
 
-		for ( let func of frame.funcs ) {
-			if ( !func._run ) {
-				func.caller[func.funcName].apply( func.caller, func.args );
+			// only run functions from the topmost frame of the stack
+			if ( i == this.stack.length - 1 ) {
+				for ( let func of frame.funcs ) {
+					if ( !func._run ) {
+						func.caller[func.funcName].apply( func.caller, func.args );
 
-				func._run = true;
+						func._run = true;
+					}
+				}
 			}
-		}
 
-		// clean stack
-		if ( !frame.inProgress() && this.stack.length > 1 ) {
-			this.stack.pop();
+			// clean stack
+			if ( !frame.inProgress() && i > 0 ) {
+				this.stack.splice( i, 1 );
 
-			this.completeFrame( frame );
+				this.completeFrame( frame );
+			}
+
+			this.blockFields( frame, blockedFields );
+
+			let allBlocked = true;
+			for ( let key in this.fields ) {
+				if ( !( key in blockedFields ) ) {
+					allBlocked = false;
+				}
+			}
+			if ( allBlocked ) break;
 		}
 
         // cancel velocities for physical fields we are currently ignoring
@@ -710,6 +729,28 @@ export class Anim {
         }
 
 		return this.stack.length != prevLength;
+	}
+
+	blockFields( frame: AnimFrame, blockedFields: Dict<boolean> ) {
+
+		// block updates down the stack
+		for ( let key in frame.targets ) {
+			blockedFields[key] = true;
+		}
+
+		if ( frame.pass == Pass.FREE_FIELDS ) {
+			for ( let key in this.fields ) {
+				if ( !this.fields[key].isFree ) blockedFields[key] = true;
+			}
+
+		} else if ( frame.pass == Pass.ALL_OTHER_FIELDS ) {
+			// done above
+
+		} else if  ( frame.pass == Pass.NONE ) {
+			for ( let key in this.fields ) {
+				blockedFields[key] = true;
+			}
+		}
 	}
 
 	completeFrame( frame: AnimFrame ) {
@@ -732,36 +773,11 @@ export class Anim {
 		}
 	}
 
-	clear( options: ClearOptions={} ) {
-		if ( this.stack.length == 0 ) return;
-
-		if ( !options.withTag && !options.withoutTag ) {
-			this.stack = this.stack.slice( 0, 1 );
-
-			if ( Debug.LOG_ANIM ) {
-				console.log( this.name + ': cleared stack' );
-			}
-
-			return;
-		}
-
-		let removed = [];
-
-		for ( let i = this.stack.length - 1; i >= 1; i-- ) {
-			if ( options.withTag && this.stack[i].tag == options.withTag ) {
-				removed.push( this.stack.splice( i, 1 ) );
-			
-			} else if ( options.withoutTag && this.stack[i].tag != options.withoutTag ) {
-				removed.push( this.stack.splice( i, 1 ) );
-			}
-		}
+	clear() {
+		this.stack = this.stack.slice( 0, 1 );
 
 		if ( Debug.LOG_ANIM ) {
-			let tags = [];
-			if ( options.withTag ) tags.push( options.withTag );
-			if ( options.withoutTag ) tags.push( '^' + options.withoutTag );
-
-			console.log( this.name + ': removed ' + removed.length + 'frames (' + tags.join(',') + ')' );
+			console.log( this.name + ': cleared stack' );
 		}
 	}
 }
