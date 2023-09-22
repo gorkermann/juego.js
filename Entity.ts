@@ -107,6 +107,7 @@ export class Entity {
 
 	drawWireframe: boolean = false;
 
+	name: string = 'entity';
 	flavorName: string = 'ENTITY';
 
 	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
@@ -164,6 +165,10 @@ export class Entity {
 	}
 
 	addSub( entity: Entity ) {
+		if ( entity.parent ) {
+			throw new Error( 'Entity.addSub: ' + this.constructor.name + ' already has parent ' + entity.parent.constructor.name );
+		}
+
 		if ( !this._subs.includes( entity ) ) {
 			this._subs.push( entity );
 		}
