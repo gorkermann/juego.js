@@ -339,26 +339,6 @@ export class Anim {
 		
 			value = field.obj[field.varname];
 
-		} else {
-			let varnames = targetKey.split( '.' );
-
-			let fieldKey = varnames[0];
-			if ( !( fieldKey in this.fields ) ) {
-				throw new Error( 'Anim.initTargetObj: no field ' + fieldKey + ' in fields' ); 
-			}
-
-			let field = this.fields[fieldKey];
-			let obj: any = field.obj[field.varname];
-
-			for ( let i = 1; i < varnames.length - 1; i++ ) {
-				if ( !( varnames[i] in obj ) ) {
-					throw new Error( 'Anim.initTargetObj: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i+1 ).join('.') );
-				}
-
-				obj = obj[varnames[i]];
-			}
-
-			value = obj[varnames.slice( -1 )[0]];
 		}
 
 		// type check
