@@ -2,6 +2,8 @@ import { Contact } from './Contact.js'
 import { Entity } from './Entity.js'
 import { Vec2 } from './Vec2.js'
 
+import { Debug } from './Debug.js'
+
 let canvas: HTMLCanvasElement;
 let context: CanvasRenderingContext2D;
 
@@ -41,8 +43,15 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let blockedDirs: Array<SolverDir> = [];
 	let pushDirs: Array<SolverDir> = [];
 
+	let babyStep = true;
+	let iterations = 0;
+
 	while ( stepTotal < step ) {
 		let partialStep = step - stepTotal;
+
+		if ( babyStep ) partialStep = 0.06; // slightly more than threshold so collision runs once
+		babyStep = false;
+
 		let solidContacts = [];
 
 		while ( partialStep > 0.05 ) {
@@ -125,6 +134,11 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 		}
 
 		stepTotal += partialStep;
+		iterations += 1;
+	}
+
+	if ( Debug.LOG_COLLISION ) {
+		console.log( 'collisionSolver: ' + iterations + ' iterations' );
 	}
 
 	let crushed = false;

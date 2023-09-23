@@ -14,6 +14,8 @@ import { Material } from './Material.js'
 import { RayHit, closestTo } from "./RayHit.js"
 import { between } from './util.js'
 
+import { Debug } from "./Debug.js"
+
 type WorldPoint = Vec2
 type LocalPoint = Vec2
 type Dir = Vec2
@@ -37,6 +39,11 @@ export enum LoopDir {
 	CW = 1,
 	CCW,
 	UNSPECIFIED
+}
+
+type EdgeContact = {
+	point: Vec2;
+	index: number;
 }
 
 export class Shape {
@@ -332,7 +339,7 @@ export class Shape {
 
 	getShapeContact( otherShape: Shape ): Contact | null {
 		let contact: Contact = null;
-		let inters: Array<Vec2> = [];
+		let inters: Array<EdgeContact> = [];
 
 		// no points from other shape inside this one
 		for ( let edge of this.edges ) {
@@ -343,16 +350,18 @@ export class Shape {
 				/* 
 					adding this filter seems to obviate the crush glitch with LockRing 
 				
-					if two points are very close together, the line between then can cause
-					weird results from slice, and then sometimes flipped normals
+					if two points are very close together, the line between them can cause
+					weird results from slice(), and flipped normals
 				*/
 				let anyEqual = false;
 
 				for ( let inter of inters ) {
-					if ( point.equals( inter, 0.001 ) ) anyEqual = true;
+					if ( point.equals( inter.point, 0.001 ) ) anyEqual = true;
 				}
 
-				if ( !anyEqual ) inters.push( point );
+				if ( !anyEqual ) {
+					inters.push( { point: point, index: i } );
+				}
 			}
 		}
 
@@ -365,32 +374,38 @@ export class Shape {
 
 				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
 		*/
-		if ( inters.length < 2 ) return null;
-		if ( inters[0].equals( inters[1] ) ) return null;
+		if ( inters.length < 1 ) return null;
 
-		// TODO: linear regression to find normal
+		// TODO: linear regression to find normal?
 		// or at least use the two points farthest apart, throw out similar points
 		// if single corner point, use the flipped normal of the other edge
-		let slice = this.slice( Line.fromPoints( inters[0], inters[1] ) );
-
-		let normal = inters[1].minus( inters[0] ).normalize();
-		if ( slice > 0.5 ) {
-			normal.rotate( -Math.PI / 2 )	
-		} else {
-			normal.rotate( Math.PI / 2 );
-		}
-
-		if ( inters.length > 2 ) console.log( 'oh boy' );
-
-		let point = inters[0];
+		let point = inters[0].point;
 		let vel = otherShape.getVel( point ); // should use step here?
+		let normal = otherShape.normals[ inters[0].index ];
+		let slice = 0.0;
 
-		// a rotating object may create multiple contacts with different velocities
-		let vel2 = otherShape.getVel( inters[1] );
+		if ( inters.length == 1 ) {
+			slice = this.slice( otherShape.edges[ inters[0].index ] );
 
-		if ( vel2.lengthSq() > vel.lengthSq() ) {
-			point = inters[1];
-			vel = vel2;
+		} else if ( inters.length > 1 ) {
+			slice = this.slice( Line.fromPoints( inters[0].point, inters[1].point ) );
+
+			normal = inters[1].point.minus( inters[0].point ).normalize();
+			if ( slice > 0.5 ) {
+				normal.rotate( -Math.PI / 2 )	
+			} else {
+				normal.rotate( Math.PI / 2 );
+			}
+
+			if ( inters.length > 2 ) console.log( 'oh boy' );
+
+			// a rotating object may create multiple contacts with different velocities
+			let vel2 = otherShape.getVel( inters[1].point );
+
+			if ( vel2.lengthSq() > vel.lengthSq() ) {
+				point = inters[1].point;
+				vel = vel2;
+			}
 		}
 
 		// velocity of the contact point projected onto the contact normal
@@ -402,7 +417,10 @@ export class Shape {
 							   normal );
 		contact.vel = nvel;
 		contact.slice = slice;
-		contact.inters = inters;
+		
+		if ( Debug.CONTACT_INTERS ) {
+			contact.inters = inters.map( x => x.point );
+		}
 
 		return contact;		
 	}
