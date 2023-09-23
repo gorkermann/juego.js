@@ -450,13 +450,14 @@ function test_targetObjs( tf: TestFuncs ) {
 
 	let anim = new Anim( {
 		'sub': new AnimField( obj, 'sub', 1 ),
+		'sub-obj': new AnimField( obj, 'sub', 1 ),
 		'y': new AnimField( obj, 'y', 1 ),
 	},
 	new AnimFrame( {
 		'y': { value: -2 },
 	} ) );
 
-	// no field sub2 in anim
+	// no field sub2 in anim, though field exists on obj
 	tf.THROWS( () => {
 		anim.pushFrame( new AnimFrame( {
 			'sub2.y': { value: 2, expireOnReach: true },
@@ -485,17 +486,27 @@ function test_targetObjs( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.sub.x, 0 );
 	tf.ASSERT_EQ( obj.sub.y, 1 );
-	tf.ASSERT_EQ( obj.y, -1 ); // no change
+	tf.ASSERT_EQ( obj.y, -1 ); // no change, frame references a different y
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.sub.x, 0 );
 	tf.ASSERT_EQ( obj.sub.y, 2 );
-	tf.ASSERT_EQ( obj.y, -1 ); // no change
+	tf.ASSERT_EQ( obj.y, -1 ); // no change again
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.sub.x, 0 );
+	tf.ASSERT_EQ( obj.sub.y, 2 );
+	tf.ASSERT_EQ( obj.y, -2 ); // other frame is gone, changing again
+
+	anim.pushFrame( new AnimFrame( {
+		'sub-obj.x': { value: 2, expireOnReach: true }, // field key is not a variable names
+	} ) );	
+
+	anim.update( 1.0, 1 );
+
+	tf.ASSERT_EQ( obj.sub.x, 1 );
 	tf.ASSERT_EQ( obj.sub.y, 2 );
 	tf.ASSERT_EQ( obj.y, -2 ); // other frame is gone, changing again
 }
@@ -682,6 +693,8 @@ function test_clear( tf: TestFuncs ) {
 		'x': { value: 4, expireOnReach: true }
 	} ), { tag: 'mark' } );
 
+	tf.ASSERT_EQ( anim.stack.length, 3 );
+
 	anim.clear( { withTag: 'mark' } );
 	anim.update( 1.0, 1 );
 
@@ -692,6 +705,8 @@ function test_clear( tf: TestFuncs ) {
 	anim.pushFrame( new AnimFrame( {
 		'x': { value: 4, expireOnReach: true }
 	} ), { tag: 'mark' } );
+
+	tf.ASSERT_EQ( anim.stack.length, 3 );
 
 	anim.clear( { withoutTag: 'mark2' } );
 	anim.update( 1.0, 1 );
@@ -733,6 +748,49 @@ function test_frameDelay( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.x, -1 );
 }
 
+function test_threads( tf: TestFuncs ) {
+	let obj = {
+		x: 0,
+		y: 0
+	}	
+
+	let anim = new Anim( {
+		'x': new AnimField( obj, 'x', 1 ),
+		'y': new AnimField( obj, 'y', 1 ),
+	},
+	new AnimFrame( {
+		'x': { value: 0 },
+	} ) );
+
+	anim.pushFrame( new AnimFrame( {
+		'x': { value: 2, expireOnReach: true },
+	} ) );
+
+	tf.THROWS( () => {
+		anim.pushFrame( new AnimFrame( {
+			'x': { value: 2, expireOnReach: true }, // x is already present in thread 0
+		} ), { threadIndex: 1 } );
+	} );
+
+	anim.pushFrame( new AnimFrame( {
+		'y': { value: 2, expireOnReach: true },
+	} ), { threadIndex: 1 } );
+
+	tf.ASSERT_EQ( anim.threads.length, 2 );
+	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[1].length, 1 );
+
+	anim.update( 1.0, 1 );
+
+	tf.ASSERT_EQ( obj.x, 1 );
+	tf.ASSERT_EQ( obj.y, 1 );
+
+	anim.clear();
+
+	tf.ASSERT_EQ( anim.threads.length, 2 );
+	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.threads[1].length, 0 );
+}
 
 let tests: Array<Test> = [];
 
@@ -799,6 +857,11 @@ tests.push( new Test( 'Anim',
 
 tests.push( new Test( 'Anim',
 					  test_frameDelay,
+					  [],
+					  [] ) );
+
+tests.push( new Test( 'Anim',
+					  test_threads,
 					  [],
 					  [] ) );
 

@@ -53,8 +53,16 @@ type AnimTarget = {
 	setDefault?: boolean // update the frame at Anim.stack[0] on completion
 
 	overrideRate?: number; // override the rate from the AnimField
-	isSpin?: boolean; // overrides isAngle and allows an angle to go greater than [-pi, pi]
     derivNo?: number; // 0 for value, 1 for first derivative
+
+    isSpin?: boolean; // overrides isAngle and allows an angle to go greater than [-pi, pi]
+    spinDir?: SpinDir; // force rotation direction
+}
+
+export enum SpinDir {
+	CLOSEST = 0,
+	CW,
+	CCW
 }
 
 export class AnimFrame {
@@ -117,7 +125,10 @@ export class AnimField {
 		if ( !obj ) return;
 
 		if ( !( varname in obj ) ) {
-			throw new Error( 'AnimField.constructor: no field ' + varname + ' in ' + obj ); 
+			let str = obj;
+			if ( typeof obj == 'object' ) str = obj.constructor.name
+
+			throw new Error( 'AnimField.constructor: no field ' + varname + ' in ' + str ); 
 		}
 
 		if ( options.isAngle === undefined ) options.isAngle = false;
@@ -230,6 +241,11 @@ export class PhysField extends AnimField {
 			d0 = this.obj[this.varname];
 			target.value = normalizeAngle( target.value );
 			diff = normalizeAngle( diff );
+
+			if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
+				 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
+				diff = normalizeAngle( Math.PI * 2 - diff );	
+			}
 		}
 
 		if ( target.reachOnCount + elapsed > 0 ) {
@@ -276,6 +292,7 @@ function normalizeAngle( angle: number ): number {
 type PushFrameOptions = {
 	tag?: string;
 	delay?: MilliCountdown;
+	threadIndex?: number;
 }
 
 type ClearOptions = {
@@ -288,6 +305,8 @@ export class Anim {
 	fields: Dict<AnimField>;
 	fieldGroups: Dict<Array<string>> = {};
 	stack: Array<AnimFrame> = [];
+	threads: Array<Array<AnimFrame>> = [this.stack];
+	touched: Dict<boolean> = {};
 
 	constructor( fields: Dict<AnimField>={}, frame: AnimFrame ) {
 		this.fields = fields;
@@ -328,11 +347,12 @@ export class Anim {
 				throw new Error( 'Anim.initTargetObj: no field ' + fieldKey + ' in fields' ); 
 			}
 
-			let obj: any = this.fields[fieldKey].obj;
+			let field = this.fields[fieldKey];
+			let obj: any = field.obj[field.varname];
 
-			for ( let i = 0; i < varnames.length - 1; i++ ) {
+			for ( let i = 1; i < varnames.length - 1; i++ ) {
 				if ( !( varnames[i] in obj ) ) {
-					throw new Error( 'Anim.initTargetObj: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i ).join('.') );
+					throw new Error( 'Anim.initTargetObj: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i+1 ).join('.') );
 				}
 
 				obj = obj[varnames[i]];
@@ -428,17 +448,48 @@ export class Anim {
 		}
 	}
 
+	matchesOtherThread( frame: AnimFrame, thread: Array<AnimFrame> ): boolean {
+		let match = false;
+
+		for ( let otherThread of this.threads ) {
+			if ( otherThread == thread ) continue;
+
+			for ( let targetKey in frame.targets ) {
+				for ( let otherFrame of otherThread ) {
+					if ( otherFrame == this.stack[0] ) continue;
+
+					if ( targetKey in otherFrame.targets ) {
+						throw new Error( this.name + ': target collison for ' + targetKey );
+					}
+				}
+			}	
+		}
+
+		return match;
+	}
+
 	pushFrame( frame: AnimFrame, options: PushFrameOptions={} ) {
 		if ( options.delay === undefined || options.delay < 0 ) options.delay = 0;
+		if ( options.threadIndex === undefined || options.threadIndex < 0 ) options.threadIndex = 0;
 
-		if ( this.initFrame( frame ) ) {
+		let threadIndex = Math.floor( options.threadIndex );
+
+		if ( this.initFrame( frame ) && 
+			 !this.matchesOtherThread( frame, this.threads[threadIndex] ) ) {
+
 			if ( options.tag ) frame.tag = options.tag; 
 			frame.delay = options.delay;
 
-			this.stack.push( frame );
+			if ( !( threadIndex in this.threads ) ) {
+				this.threads[threadIndex] = [];
+			}
+
+			this.threads[threadIndex].push( frame );
 
 			if ( Debug.LOG_ANIM ) {
-				console.log( this.name + ': pushed frame ' + (this.stack.length - 1) + 
+				console.log( this.name + ': pushed frame ' + 
+							 (this.threads[threadIndex].length - 1) + 
+							 ' to thread ' + threadIndex + 
 							 ' ' + JSON.stringify( frame.targets ) );
 			}
 		}
@@ -451,9 +502,9 @@ export class Anim {
 			
 		let varnames = targetKey.split( '.' );
 
-		let obj: any = field.obj;
+		let obj: any = field.obj[field.varname];
 
-		for ( let i = 0; i < varnames.length - 1; i++ ) {
+		for ( let i = 1; i < varnames.length - 1; i++ ) {
 			if ( !( varnames[i] in obj ) ) {
 				throw new Error( 'Anim.getValue: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i ).join('.') );
 			}
@@ -473,9 +524,9 @@ export class Anim {
 
 		let varnames = targetKey.split( '.' );
 
-		let obj: any = field.obj;
+		let obj: any = field.obj[field.varname];
 
-		for ( let i = 0; i < varnames.length - 1; i++ ) {
+		for ( let i = 1; i < varnames.length - 1; i++ ) {
 			if ( !( varnames[i] in obj ) ) {
 				throw new Error( 'Anim.getValue: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i ).join('.') );
 			}
@@ -505,6 +556,11 @@ export class Anim {
 				value = normalizeAngle( value );
 				target.value = normalizeAngle( target.value );
 				diff = normalizeAngle( diff );
+
+				if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
+					 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
+					diff = normalizeAngle( Math.PI * 2 - diff );	
+				}
 			}
 
 			if ( target.reachOnCount + elapsed > 0 ) {
@@ -615,34 +671,49 @@ export class Anim {
 		}
 	}
 
-	update( step: number, elapsed: number ): boolean {
-		if ( this.stack.length == 0 ) return;
+	update( step: number, elapsed: number ) {
+		this.touched = {};
 
-		let prevLength = this.stack.length;
+		for ( let thread of this.threads ) {
+			this.updateThread( step, elapsed, thread );
+		}
 
-		//let frame = this.stack.slice( -1 )[0];
+		// cancel velocities for physical fields we are currently ignoring
+        for ( let key in this.fields ) {
+            let field = this.fields[key];
 
-		let physUpdated: Dict<boolean> = {};
+            if ( field instanceof PhysField && !( key in this.touched ) ) {
+            	field.zero();
+            }
+        }
+	}	
+
+	updateThread( step: number, elapsed: number, thread: Array<AnimFrame> ): boolean {
+		if ( thread.length == 0 ) return;
+
+		let prevLength = thread.length;
 
 		// update
-		let topIndex = this.stack.length - 1;
-		for ( let i = this.stack.length - 1; i >= 0; i-- ) {
-			if ( this.stack[i].delay > 0 ) continue;
+		let topIndex = thread.length - 1;
+		for ( let i = thread.length - 1; i >= 0; i-- ) {
+			if ( thread[i].delay > 0 ) continue;
 
 			topIndex = i;
 			break;
 		}
 
-		for ( let frame of this.stack ) {
+		for ( let frame of thread ) {
 			if ( frame.delay > 0 ) frame.delay -= elapsed;
 		}
 
-		let frame = this.stack[topIndex];
+		let frame = thread[topIndex];
 
 		for ( let key in frame.targets ) {
 			let target = frame.targets[key];
 			let fieldKey = key.split( '.' )[0];
 			let field = this.fields[fieldKey];
+
+			this.touched[fieldKey] = true;
 
 			if ( target.expireOnCount && target.expireOnCount > 0 ) {
 				target.expireOnCount -= elapsed;
@@ -672,8 +743,6 @@ export class Anim {
 			} else if ( field instanceof PhysField ) {
 				this.updatePhysical( step, elapsed, key, field, target );
 
-				physUpdated[key] = true;
-
 			} else if ( typeof value == 'number' ) {
 				this.updateNumber( step, elapsed, key, field, target );
 
@@ -694,25 +763,17 @@ export class Anim {
 		}
 
 		// clean stack
-		if ( !frame.inProgress() && this.stack.length > 1 ) {
-			this.stack.pop();
-
-			this.completeFrame( frame );
+		if ( !frame.inProgress() ) {
+			if ( !( thread == this.stack && thread.length == 1 ) ) {
+				this.completeFrame( frame, thread );
+			}
 		}
 
-        // cancel velocities for physical fields we are currently ignoring
-        for ( let key in this.fields ) {
-            let field = this.fields[key];
-
-            if ( field instanceof PhysField && !( key in physUpdated ) ) {
-            	field.zero();
-            }
-        }
-
-		return this.stack.length != prevLength;
+		return thread.length != prevLength;
 	}
 
-	completeFrame( frame: AnimFrame ) {
+	completeFrame( frame: AnimFrame, thread: Array<AnimFrame> ) {
+		thread.pop();
 
 		// optionally set new defaults
 		for ( let key in frame.targets ) {
@@ -727,19 +788,26 @@ export class Anim {
 		}
 
 		if ( Debug.LOG_ANIM ) {
-			console.log( this.name + ': completed frame ' + this.stack.length + 
+			console.log( this.name + ': completed frame ' + 
+						 thread.length + 
+						 ' of thread ' + this.threads.indexOf( thread ) + 
 						 ' ' + JSON.stringify( frame.targets ) );
 		}
 	}
 
 	clear( options: ClearOptions={} ) {
-		if ( this.stack.length == 0 ) return;
-
 		if ( !options.withTag && !options.withoutTag ) {
-			this.stack = this.stack.slice( 0, 1 );
+			for ( let thread of this.threads ) {
+				let minIndex = 0;
+				if ( thread == this.stack ) minIndex = 1; 
+
+				while ( thread.length > minIndex ) {
+					thread.pop();
+				}
+			}
 
 			if ( Debug.LOG_ANIM ) {
-				console.log( this.name + ': cleared stack' );
+				console.log( this.name + ': cleared threads' );
 			}
 
 			return;
@@ -747,21 +815,23 @@ export class Anim {
 
 		let removed = [];
 
-		for ( let i = this.stack.length - 1; i >= 1; i-- ) {
-			if ( options.withTag && this.stack[i].tag == options.withTag ) {
-				removed.push( this.stack.splice( i, 1 ) );
-			
-			} else if ( options.withoutTag && this.stack[i].tag != options.withoutTag ) {
-				removed.push( this.stack.splice( i, 1 ) );
+		for ( let thread of this.threads ) {
+			for ( let i = thread.length - 1; i >= 1; i-- ) {
+				if ( options.withTag && thread[i].tag == options.withTag ) {
+					removed.push( thread.splice( i, 1 ) );
+				
+				} else if ( options.withoutTag && thread[i].tag != options.withoutTag ) {
+					removed.push( thread.splice( i, 1 ) );
+				}
 			}
-		}
 
-		if ( Debug.LOG_ANIM ) {
-			let tags = [];
-			if ( options.withTag ) tags.push( options.withTag );
-			if ( options.withoutTag ) tags.push( '^' + options.withoutTag );
+			if ( Debug.LOG_ANIM ) {
+				let tags = [];
+				if ( options.withTag ) tags.push( options.withTag );
+				if ( options.withoutTag ) tags.push( '^' + options.withoutTag );
 
-			console.log( this.name + ': removed ' + removed.length + 'frames (' + tags.join(',') + ')' );
+				console.log( this.name + ': removed ' + removed.length + 'frames (' + tags.join(',') + ')' );
+			}
 		}
 	}
 }
