@@ -189,6 +189,48 @@ function test_Line( tf: TestFuncs ) {
 	tf.ASSERT_EQ( hit3.normal, new Vec2( -1, 0 ) );
 }
 
+function test_whichSide( tf: TestFuncs ) {
+	let l = new Line( 0, 0, 0, 1 );
+
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0, 1 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.01, 1 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( -0.01, 1 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.02, 1 )] ), [-1] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( -0.02, 1 )] ), [1] );
+
+	l = new Line( 1, 1, 1, 5 );
+
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 1.009, 100 )] ), [0] ); // slightly alter these due to floating point errors
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.999, 100 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 1.011, 100 )] ), [-1] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.98, 100 )] ), [1] );
+
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 1.009, -100 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.999, -100 )] ), [0] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 1.011, -100 )] ), [-1] );
+	tf.ASSERT_EQ( l.whichSide( [new Vec2( 0.98, -100 )] ), [1] );
+}
+
+function test_sortAlong( tf: TestFuncs ) {
+	let l = new Line( 1, 1, 4, 9 );
+	let points = [];
+	let t = 10;
+
+	for ( let i = 0; i < 10; i++ ) {
+		points.push( l.p1.alongTo( l.p2, t ) );
+
+		t -= Math.random() * 2 + 0.1;
+	}
+
+	let sorted = points.concat();
+	l.sortAlong( sorted );
+
+	// should be exactly reversed
+	for ( let i = 0; i < 10; i++ ) {
+		tf.ASSERT_EQ( sorted.indexOf( points[i] ), 9 - i );
+	}
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Line',
@@ -202,5 +244,15 @@ tests.push( new Test( 'Line',
 					   ],
 					  ['toString',
 					   'draw'] ) );
+
+tests.push( new Test( 'Line',
+					  test_whichSide,
+					  ['whichSide'],
+					  [] ) );
+
+tests.push( new Test( 'Line',
+					  test_sortAlong,
+					  ['sortAlong'],
+					  [] ) );
 
 export default tests;

@@ -143,17 +143,26 @@ export class Line {
 	}
 
 	// check whether any of the points are on different sides of the line
+	/*
+		if the "line" is the infinite line drawn from the unit segment b:
+
+		|b| = 1
+		sin(theta) = opp / hyp = distance_to_line / |a|
+		a cross b = |a| * |b| * sin(theta)
+				  = |a| * 1 * distance_to_line / |a|
+				  = distance_to_line
+	*/
 	whichSide( points: Array<Vec2> ): Array<number> {
 		let sides: Array<number> = [];
 
-		let v1 = this.p2.minus( this.p1 );
+		let v1 = this.p2.minus( this.p1 ).normalize();
 
 		for ( let i = 0; i < points.length; i++ ) {
-			let cross = v1.cross( points[i].minus( this.p1 ) );
+			let distFromLine = v1.cross( points[i].minus( this.p1 ) );
 
-			if ( cross < -0.01 ) {
+			if ( distFromLine < -0.01 ) {
 				sides.push( -1 );
-			} else if ( cross > 0.01 ) {
+			} else if ( distFromLine > 0.01 ) {
 				sides.push ( 1 );
 			} else {
 				sides.push( 0 );
