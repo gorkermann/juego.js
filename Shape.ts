@@ -56,6 +56,8 @@ export class Shape {
 	material: Material = new Material( 0, 0, 0 );
 	materialTop: Material = null;
 
+	hollow: boolean = false;
+
 	constructor() {}
 
 	copy(): Shape {
@@ -337,6 +339,27 @@ export class Shape {
 		return false;
 	}
 
+	getShapeBodyContact( otherShape: Shape ): Contact | null {
+		let contained = [];
+
+		for ( let point of otherShape.points ) {
+			if ( this.contains( point, 0.0, false ) ) {
+				contained.push( point );
+			}
+		}
+
+		if ( contained.length == 0 ) return null;
+
+		let vel = otherShape.getVel( contained[0] ); // TODO: area center? or farthest along point on midline?
+
+		let contact = new Contact( null, null, contained[0], vel.unit().flip() );
+
+		contact.vel = vel;
+		contact.slice = 0.5;
+
+		return contact;
+	}
+
 	getShapeContact( otherShape: Shape ): Contact | null {
 		let contact: Contact = null;
 		let inters: Array<EdgeContact> = [];
@@ -366,15 +389,21 @@ export class Shape {
 		}
 
 		/*
-			inters.length == 0 means no contact
+			inters.length == 0 means one shape is either completely inside or outside of the other
+
+				implying that an earlier collision was missed
+
 			inters.length == 1 means either:
 
-				one corner of either shape is right on an edge of the other one,
+				one corner of either shape is right on an edge of the other,
 				and one of the intersections has been rejected
 
 				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
 		*/
-		if ( inters.length < 1 ) return null;
+		if ( inters.length < 1 ) {
+			if ( this.hollow ) return null;
+			else return this.getShapeBodyContact( otherShape );
+		}
 
 		// TODO: linear regression to find normal?
 		// or at least use the two points farthest apart, throw out similar points
