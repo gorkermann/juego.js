@@ -54,14 +54,15 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.onFire, true );
 
 	// push a new frame
-	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
 
 	anim.pushFrame( new AnimFrame( {
 		'x': { value: 2, expireOnReach: true },
 		'onFire': { value: false } // no expiration set
 	} ) );
 
-	tf.ASSERT_EQ( anim.stack.length, 2 ); // new frame is present
+	tf.ASSERT_EQ( anim.threads.length, 1 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 ); // new frame is present
 
 	anim.update( 1.0, 1 );
 
@@ -69,7 +70,7 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.y, 0.25 );
 	tf.ASSERT_EQ( obj.onFire, false );
 
-	tf.ASSERT_EQ( anim.stack.length, 1 ); // new frame is gone
+	tf.ASSERT_EQ( anim.threads[0].length, 0 ); // new frame is gone
 
 	// return to old targets
 	anim.update( 1.0, 1 );
@@ -88,20 +89,20 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.x, 2 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
 
-	// no change if elapsed=0
+	// no duration change if elapsed=0 (frame keeps updating)
 	anim.update( 1.0, 0 );
 
 	tf.ASSERT_EQ( obj.x, 3 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
 
 	// trip duration counter
-	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 );
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.x, 4 );
 	tf.ASSERT_EQ( obj.y, 0.35 );
-	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.threads[0].length, 0 );
 
 	// return to old targets
 	anim.update( 1.0, 1 );
@@ -134,15 +135,15 @@ function test_Anim( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 0.3 );
-	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 );
+	tf.ASSERT_EQ( anim.default.targets['y'].value, 1 );
 
 	anim.update( 1.0, 1 );
 
 	tf.ASSERT_EQ( obj.x, 1 );
 	tf.ASSERT_EQ( obj.y, 0 );
-	tf.ASSERT_EQ( anim.stack.length, 1 );
-
-	tf.ASSERT_EQ( anim.stack[0].targets['y'].value, 0 )
+	tf.ASSERT_EQ( anim.threads[0].length, 0 );
+	tf.ASSERT_EQ( anim.default.targets['y'].value, 0 );
 
 	anim.update( 1.0, 1 );
 
@@ -150,6 +151,7 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.y, 0 );
 
 	// with Vec2
+	// initTargetObj() type checking
 	let obj2 = {
 		a: new Vec2(),
 		b: new Vec2()
@@ -208,10 +210,10 @@ function test_Anim( tf: TestFuncs ) {
 
 function test_PhysField( tf: TestFuncs ) {
 
-	// constructor
-	// updateVec2
-	// updateNumber
-	// zero
+	// constructor()
+	// updateVec2()
+	// updateNumber()
+	// zero()
 	let obj3 = {
 		p: new Vec2(),
 		dp: new Vec2(),
@@ -256,7 +258,7 @@ function test_PhysField( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj3.dx, 0 );
 	tf.ASSERT_EQ( obj3.x, 2 );
 
-	// zero (explicit)
+	// zero() (explicit)
 	obj3.dp.set( new Vec2( 1, 1 ) );
 	( anim.fields['p'] as PhysField ).zero();
 
@@ -436,6 +438,7 @@ function test_readOnlyTargets( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.y, 1 ); // 
 }
 
+/* removed feature, not running */
 function test_targetObjs( tf: TestFuncs ) {
 	let obj2 = {
 		x: 0,
@@ -530,6 +533,18 @@ function test_AnimFunc( tf: TestFuncs ) {
 	new AnimFrame( {
 		'x': { value: -2 },
 	} ) );
+
+	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
+		{ caller: null, funcName: 'A' } // no caller object
+	] ) ) } );
+
+	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
+		{ caller: obj, funcName: 'y' } // not a function
+	] ) ) } );
+
+	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
+		{ caller: obj, funcName: 'x' } // not a function
+	] ) ) } );
 
 	anim.pushFrame( new AnimFrame( {}, [
 		{ caller: obj, funcName: 'A' }
@@ -635,9 +650,9 @@ function test_fieldGroup( tf: TestFuncs ) {
 		'y': { value: 0 },
 	} ) );
 
-	tf.THROWS( () => anim.addGroup( 'x', ['x', 'y'] ) );
-	tf.THROWS( () => anim.addGroup( 'vars', [] ) );
-	tf.THROWS( () => anim.addGroup( 'vars', ['x', 'z'] ) );
+	tf.THROWS( () => anim.addGroup( 'x', ['x', 'y'] ) ); // group has same key as field x
+	tf.THROWS( () => anim.addGroup( 'vars', [] ) ); // no keys in group
+	tf.THROWS( () => anim.addGroup( 'vars', ['x', 'z'] ) ); // no field for key z
 
 	// ok
 	anim.addGroup( 'vars', ['x', 'y'] );
@@ -670,48 +685,48 @@ function test_clear( tf: TestFuncs ) {
 		'x': new AnimField( obj, 'x', 1 ),
 	},
 	new AnimFrame( {
-		'x': { value: 0 },
+		'x': { value: 1 },
 	} ) );
 
-	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.default.targets['x'].value, 1 );
 
 	anim.clear();
 
-	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.default.targets['x'].value, 1 );
 
-	anim.stack[0].tag = 'mark';
+	anim.default.tag = 'mark';
 	anim.clear( { withTag: 'mark' } );
 
-	tf.ASSERT_EQ( anim.stack.length, 1 ); // don't clear default frame
+	tf.ASSERT_EQ( anim.default.targets['x'].value, 1 ); // don't clear default frame
 
 
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: -4, expireOnReach: true }
+		'x': { value: -4, expireOnReach: true } // this frame will stay
 	} ), { tag: 'mark2' } );
 
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: 4, expireOnReach: true }
+		'x': { value: 4, expireOnReach: true } // this frame will be cleared
 	} ), { tag: 'mark' } );
 
-	tf.ASSERT_EQ( anim.stack.length, 3 );
+	tf.ASSERT_EQ( anim.threads[0].length, 2 );
 
 	anim.clear( { withTag: 'mark' } );
 	anim.update( 1.0, 1 );
 
-	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 );
 	tf.ASSERT_EQ( obj.x, -1 );
 
 
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: 4, expireOnReach: true }
+		'x': { value: 4, expireOnReach: true } // this frame will be cleared
 	} ), { tag: 'mark' } );
 
-	tf.ASSERT_EQ( anim.stack.length, 3 );
+	tf.ASSERT_EQ( anim.threads[0].length, 2 );
 
 	anim.clear( { withoutTag: 'mark2' } );
 	anim.update( 1.0, 1 );
 
-	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 );
 	tf.ASSERT_EQ( obj.x, -2 );
 }
 
@@ -751,7 +766,8 @@ function test_frameDelay( tf: TestFuncs ) {
 function test_threads( tf: TestFuncs ) {
 	let obj = {
 		x: 0,
-		y: 0
+		y: 0,
+		z: 0
 	}	
 
 	let anim = new Anim( {
@@ -759,37 +775,60 @@ function test_threads( tf: TestFuncs ) {
 		'y': new AnimField( obj, 'y', 1 ),
 	},
 	new AnimFrame( {
-		'x': { value: 0 },
+		'x': { value: -2 },
+		'y': { value: -2 },
 	} ) );
 
+	tf.ASSERT_EQ( anim.isDone(), true );
+
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: 2, expireOnReach: true },
-	} ) );
+		'x': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored
+	} ) ); // thread 0 by default
 
 	tf.THROWS( () => {
 		anim.pushFrame( new AnimFrame( {
-			'x': { value: 2, expireOnReach: true }, // x is already present in thread 0
+			'x': { value: 2, expireOnReach: true }, // x is already present in thread 0 (duplicate target)
 		} ), { threadIndex: 1 } );
 	} );
 
 	anim.pushFrame( new AnimFrame( {
-		'y': { value: 2, expireOnReach: true },
+		'y': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored
 	} ), { threadIndex: 1 } );
 
+	tf.ASSERT_EQ( anim.isDone(), false );
 	tf.ASSERT_EQ( anim.threads.length, 2 );
-	tf.ASSERT_EQ( anim.stack.length, 2 );
+	tf.ASSERT_EQ( anim.threads[0].length, 1 );
 	tf.ASSERT_EQ( anim.threads[1].length, 1 );
 
 	anim.update( 1.0, 1 );
 
-	tf.ASSERT_EQ( obj.x, 1 );
+	tf.ASSERT_EQ( obj.x, 1 ); // both threads get run
 	tf.ASSERT_EQ( obj.y, 1 );
 
 	anim.clear();
 
-	tf.ASSERT_EQ( anim.threads.length, 2 );
-	tf.ASSERT_EQ( anim.stack.length, 1 );
+	tf.ASSERT_EQ( anim.isDone(), true );
+	tf.ASSERT_EQ( anim.threads.length, 2 ); // same number of threads
+	tf.ASSERT_EQ( anim.threads[0].length, 0 ); // threads cleared completely
 	tf.ASSERT_EQ( anim.threads[1].length, 0 );
+
+	tf.ASSERT_EQ( obj.x, 1 ); // same values
+	tf.ASSERT_EQ( obj.y, 1 );
+
+	anim.pushFrame( new AnimFrame( {
+		'y': { value: 2, expireOnReach: true, setDefault: true }, // no throw, since collisions with default frame are ignored
+	} ), { threadIndex: 1 } );
+
+	tf.ASSERT_EQ( anim.isDone(), false );
+
+	anim.update( 1.0, 1 );
+
+	tf.ASSERT_EQ( anim.isDone(), true );
+	tf.ASSERT_EQ( obj.y, 2 );
+
+	anim.update( 1.0, 1 );
+
+	tf.ASSERT_EQ( obj.y, 2 ); // new default is 2
 }
 
 let tests: Array<Test> = [];
@@ -800,9 +839,15 @@ tests.push( new Test( 'Anim',
 					   'pushFrame',
 					   'updateNumber',
 					   'updateVec2',
+					   'initTargetObj',
 					   'update',
+					   'updateThread',
+					   'updateFrame',
 					   'completeFrame',
-					   'Anim.function.AnimField',
+					   'setDefault',
+					   'AnimField.constructor',
+					   'AnimField.get',
+					   'AnimField.set',
 					   'AnimFrame.constructor',
 					   'AnimFrame.inProgress'],
 					  [] ) );
@@ -812,6 +857,7 @@ tests.push( new Test( 'PhysField',
 					  ['constructor',
 					   'updateVec2',
 					   'updateNumber',
+					   'Anim.updatePhysical',
 					   'zero'],
 					  [] ) );
 
@@ -831,13 +877,8 @@ tests.push( new Test( 'Anim',
 					  [] ) );
 
 tests.push( new Test( 'Anim',
-					  test_targetObjs,
-					  [],
-					  [] ) );
-
-tests.push( new Test( 'Anim',
 					  test_AnimFunc,
-					  [],
+					  ['initFrame'],
 					  [] ) );
 
 tests.push( new Test( 'PhysField',
@@ -852,7 +893,9 @@ tests.push( new Test( 'Anim',
 
 tests.push( new Test( 'Anim',
 					  test_clear,
-					  ['clear'],
+					  ['clear',
+					   'clearAllThreads',
+					   'clearByTag'],
 					  [] ) );
 
 tests.push( new Test( 'Anim',
@@ -862,7 +905,11 @@ tests.push( new Test( 'Anim',
 
 tests.push( new Test( 'Anim',
 					  test_threads,
-					  [],
+					  ['matchesOtherThread',
+					   'update',
+					   'updateThread',
+					   'completeFrame', // defaults set correctly
+					   'isDone'],
 					  [] ) );
 
 export default tests;

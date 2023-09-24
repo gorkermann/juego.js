@@ -50,7 +50,7 @@ type AnimTarget = {
 
 	readOnly?: boolean // Anim doesn't update the value, only checks for completeness
 
-	setDefault?: boolean // update the frame at Anim.stack[0] on completion
+	setDefault?: boolean // update the default frame on completion
 
 	overrideRate?: number; // override the rate from the AnimField
     derivNo?: number; // 0 for value, 1 for first derivative
@@ -138,6 +138,14 @@ export class AnimField {
 		this.rate = Math.abs( rate );
 
 		this.isAngle = options.isAngle;
+	}
+
+	get(): AnimValue {
+		return this.obj[this.varname];
+	}
+
+	set( value: AnimValue ) {
+		this.obj[this.varname] = value;
 	}
 }
 
@@ -304,13 +312,45 @@ export class Anim {
 	name: string = 'anim' + ( animId++ );
 	fields: Dict<AnimField>;
 	fieldGroups: Dict<Array<string>> = {};
-	stack: Array<AnimFrame> = [];
-	threads: Array<Array<AnimFrame>> = [this.stack];
+	default: AnimFrame = new AnimFrame( {} );
+	threads: Array<Array<AnimFrame>> = [];
 	touched: Dict<boolean> = {};
 
-	constructor( fields: Dict<AnimField>={}, frame: AnimFrame ) {
+	constructor( fields: Dict<AnimField>={}, frame: AnimFrame=new AnimFrame( {} ) ) {
 		this.fields = fields;
-		if ( frame ) this.pushFrame( frame );
+
+		try {
+			this.initFrame( frame );
+		} catch {
+			// do nothing
+		}
+
+		for ( let key in frame.targets ) {
+			this.setDefault( key, frame.targets[key] );
+		}
+	}
+
+	/**
+	 * default frame ignores most of the fields in AnimTarget and only takes a value 
+	 * could potentially also take: derivNo, isSpin, spinDir
+	 * 
+	 * @param {string}     key    [description]
+	 * @param {AnimTarget} target [description]
+	 */
+	setDefault( key: string, target: AnimTarget ) {
+		if ( key in this.default.targets ) {
+			this.default.targets[key].value = target.value;	
+		} else {
+			this.default.targets[key] = { value: target.value };	
+		}
+	}
+
+	isDone(): boolean {
+		for ( let thread of this.threads ) {
+			if ( thread.length > 0 ) return false;
+		}
+
+		return true;
 	}
 
 	addGroup( groupKey: string, fieldKeys: Array<string> ) {
@@ -334,21 +374,22 @@ export class Anim {
 	initTargetObj( targetKey: string, target: AnimTarget ) {
 		let value: any;
 
-		if ( targetKey in this.fields ) {
-			let field = this.fields[targetKey];
-		
-			value = field.obj[field.varname];
-
+		if ( !( targetKey in this.fields ) ) {
+			throw new Error( 'Anim.initTargetObj: no field ' + targetKey );			
 		}
 
+		let field = this.fields[targetKey];
+		value = field.obj[field.varname];
+
 		// type check
+		// TODO: clearer output for objects
 		if ( typeof target.value != typeof value ) {
 			let msg = '(' + typeof target.value + ' != '  + typeof value + ')';
 
 			throw new Error( 'Anim.initTargetObj: type mismatch for key ' + targetKey + ' ' + msg );
 		}
 
-		let canUse = false;
+		/*let canUse = false;
 		if ( typeof target.value == 'boolean' ) canUse = true;
 		if ( typeof target.value == 'number' ) canUse = true;
 		if ( typeof target.value == 'string' ) canUse = true;
@@ -356,7 +397,7 @@ export class Anim {
 		
 		if ( !canUse ) {
 			throw new Error( 'Anim.initTargetObj: Unhandled target value type ' + typeof target.value );
-		}
+		}*/
 	}
 
 	initFrame( frame: AnimFrame ): boolean {
@@ -378,8 +419,8 @@ export class Anim {
 		for ( let key of removeKeys ) delete frame.targets[key];
 		for ( let key in addTargets ) {
 			if ( key in frame.targets ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(duplicate target ' + key + ')' );
-				return false;
+				throw new Error ( this.name + '.initFrame: (duplicate target ' + key + ') in frame ' + 
+								  JSON.stringify( frame.targets ) );
 			}
 
 			frame.targets[key] = addTargets[key];
@@ -392,13 +433,13 @@ export class Anim {
 			this.initTargetObj( key, target );
 
 			if ( target.expireOnCount < 0 ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(negative expireOnCount)' );
-				return false;
+				console.warn( this.name + '.initFrame: negative expireOnCount in frame ' + 
+							  JSON.stringify( frame.targets ) );
 			}
 
 			if ( target.reachOnCount < 0 ) {
-				console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + '(negative reachOnCount)' );
-				return false;
+				console.warn( this.name + '.initFrame: negative reachOnCount in frame ' + 
+							  JSON.stringify( frame.targets ) );
 			}
 
 			if ( target.expireOnReach || 
@@ -410,22 +451,20 @@ export class Anim {
 
 		for ( let func of frame.funcs ) {
 			if ( !func.caller ) {
-				throw new Error( 'Anim.initFrame: no caller object for function ' + func.funcName );
+				throw new Error( this.name + '.initFrame: no caller object for function ' + func.funcName );
 			}
 
 			let type = typeof func.caller[func.funcName];
 			if ( type != 'function' ) {
-				throw new Error( 'Anim.initFrame: ' + func.funcName + ' is a not a function (' + type + ')' );
+				throw new Error( this.name + '.initFrame: ' + func.funcName + ' is a not a function (' + type + ')' );
 			}
 		}
 
-		if ( frame.inProgress() || this.stack.length == 0 ) {
-			return true;
-
-		} else {
-			console.warn( 'Anim.initFrame: ignoring frame ' + JSON.stringify( frame.targets ) + ' (no expiry set)');
-			return false;
+		if ( !frame.inProgress() ) {
+			throw new Error( this.name + '.initFrame: no expiry set in frame ' + JSON.stringify( frame.targets ) );
 		}
+
+		return true;
 	}
 
 	matchesOtherThread( frame: AnimFrame, thread: Array<AnimFrame> ): boolean {
@@ -436,8 +475,6 @@ export class Anim {
 
 			for ( let targetKey in frame.targets ) {
 				for ( let otherFrame of otherThread ) {
-					if ( otherFrame == this.stack[0] ) continue;
-
 					if ( targetKey in otherFrame.targets ) {
 						throw new Error( this.name + ': target collison for ' + targetKey );
 					}
@@ -475,48 +512,6 @@ export class Anim {
 		}
 	}
 
-	getValue( field: AnimField, targetKey: string ): AnimValue {
-		if ( targetKey in this.fields ) {
-			return field.obj[field.varname];
-		}
-			
-		let varnames = targetKey.split( '.' );
-
-		let obj: any = field.obj[field.varname];
-
-		for ( let i = 1; i < varnames.length - 1; i++ ) {
-			if ( !( varnames[i] in obj ) ) {
-				throw new Error( 'Anim.getValue: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i ).join('.') );
-			}
-
-			obj = obj[varnames[i]];
-		}
-
-		return obj[varnames.slice( -1 )[0]];
-	}
-
-	setValue( field: AnimField, targetKey: string, value: AnimValue ) {
-		if ( targetKey in this.fields ) {
-			field.obj[field.varname] = value;
-
-			return;
-		}
-
-		let varnames = targetKey.split( '.' );
-
-		let obj: any = field.obj[field.varname];
-
-		for ( let i = 1; i < varnames.length - 1; i++ ) {
-			if ( !( varnames[i] in obj ) ) {
-				throw new Error( 'Anim.getValue: no field ' + varnames[i] + ' in ' + varnames.slice( 0, i ).join('.') );
-			}
-
-			obj = obj[varnames[i]];
-		}
-
-		obj[varnames.slice( -1 )[0]] = value;
-	}
-
 	updateNumber( step: number, elapsed: number, targetKey: string, field: AnimField, target: AnimTarget ) {
 		if ( typeof target.value != 'number' ) {
 			throw new Error( 'Anim.update: expected number target for field ' + targetKey );
@@ -527,7 +522,7 @@ export class Anim {
 		}*/
 
 		if ( !target.readOnly ) {
-			let value = this.getValue( field, targetKey ) as number;
+			let value = field.get() as number;
 			let rate = getRate( step, elapsed, targetKey, field, target );
 
 			let diff = value - target.value;
@@ -557,10 +552,10 @@ export class Anim {
 				value -= rate;
 			}
 
-			this.setValue( field, targetKey, value );
+			field.set( value );
 		}
 
-		if ( this.getValue( field, targetKey ) == target.value && target.expireOnReach ) {
+		if ( field.get() == target.value && target.expireOnReach ) {
 			target._inProgress = false;
 		}
 	}
@@ -570,7 +565,7 @@ export class Anim {
 			throw new Error( 'Anim.update: expected string target for field ' + targetKey );
 		}
 
-		let value = field.obj[field.varname] as string;
+		let value = field.get() as string;
 		let rate = getRate( step, elapsed, targetKey, field, target );
 
 		if ( target.value.indexOf( value ) < 0 ) {
@@ -607,7 +602,7 @@ export class Anim {
 		}*/
 
 		if ( !target.readOnly ) {
-			let value = this.getValue( field, targetKey ) as Vec2;
+			let value = field.get() as Vec2;
 			let rate = getRate( step, elapsed, targetKey, field, target );
 			let diff = target.value.minus( value );
 
@@ -623,7 +618,7 @@ export class Anim {
 			}
 		}
 
-		if ( ( this.getValue( field, targetKey ) as Vec2 ).equals( target.value ) && target.expireOnReach ) {
+		if ( ( field.get() as Vec2 ).equals( target.value ) && target.expireOnReach ) {
 			target._inProgress = false;
 		}
 	}
@@ -652,10 +647,26 @@ export class Anim {
 	}
 
 	update( step: number, elapsed: number ) {
+		/*
+			different ways of using the default frame:
+
+			- update only fields that weren't touched by current frames
+			- update only fields that aren't touched by any frame
+			- update if all threads are empty after updateThread()
+			- update if all threads are empty before updateThread() <- USING THIS ONE  
+			- update if thread 0 is empty after updateThread()
+			- update if thread 0 is empty before updateThread()
+		 */
+
 		this.touched = {};
 
-		for ( let thread of this.threads ) {
-			this.updateThread( step, elapsed, thread );
+		if ( this.isDone() ) {
+			this.updateFrame( step, elapsed, this.default );
+
+		} else {
+			for ( let thread of this.threads ) {
+				this.updateThread( step, elapsed, thread );
+			}
 		}
 
 		// cancel velocities for physical fields we are currently ignoring
@@ -668,12 +679,12 @@ export class Anim {
         }
 	}	
 
-	updateThread( step: number, elapsed: number, thread: Array<AnimFrame> ): boolean {
+	private updateThread( step: number, elapsed: number, thread: Array<AnimFrame> ): boolean {
 		if ( thread.length == 0 ) return;
 
 		let prevLength = thread.length;
 
-		// update
+		// update delays
 		let topIndex = thread.length - 1;
 		for ( let i = thread.length - 1; i >= 0; i-- ) {
 			if ( thread[i].delay > 0 ) continue;
@@ -686,14 +697,42 @@ export class Anim {
 			if ( frame.delay > 0 ) frame.delay -= elapsed;
 		}
 
+		// update top frame
 		let frame = thread[topIndex];
 
-		for ( let key in frame.targets ) {
-			let target = frame.targets[key];
-			let fieldKey = key.split( '.' )[0];
-			let field = this.fields[fieldKey];
+		this.updateFrame( step, elapsed, frame );
 
-			this.touched[fieldKey] = true;
+		// clean thread
+		if ( !frame.inProgress() ) {
+			let index = thread.indexOf( frame );
+
+			if ( index >= 0 ) {
+				thread.splice( index, 1 );
+
+			// frame was deleted by its own function?
+			} else {
+				throw new Error( this.name + '.updateThread: cannot find frame after updating ' + JSON.stringify( frame.targets ) );
+			}
+
+			this.completeFrame( frame, thread );
+		}
+
+		return thread.length != prevLength;
+	}
+
+	private updateFrame( step: number, elapsed: number, frame: AnimFrame ) {
+		for ( let key in frame.targets ) {
+			if ( key in this.touched ) {
+				if ( frame != this.default ) {
+					console.warn( this.name + '.updateFrame: ignoring multiple update of key ' + key );
+				}
+				continue;
+			}
+
+			let target = frame.targets[key];
+			let field = this.fields[key];
+
+			this.touched[key] = true;
 
 			if ( target.expireOnCount && target.expireOnCount > 0 ) {
 				target.expireOnCount -= elapsed;
@@ -705,7 +744,7 @@ export class Anim {
 				if ( target.reachOnCount <= 0 ) target._inProgress = false;	
 			}
 
-			let value = this.getValue( field, key );
+			let value = field.get();
 
 			if ( typeof value == 'boolean' ) {
 				if ( typeof target.value != 'boolean' ) {
@@ -713,10 +752,10 @@ export class Anim {
 				}
 				
 				if ( !target.readOnly ) {
-					this.setValue( field, key, target.value );
+					field.set( target.value );
 				}
 
-				if ( this.getValue( field, key ) == target.value && target.expireOnReach ) {
+				if ( field.get() == target.value && target.expireOnReach ) {
 					target._inProgress = false;
 				}
 
@@ -741,29 +780,14 @@ export class Anim {
 				func._run = true;
 			}
 		}
-
-		// clean stack
-		if ( !frame.inProgress() ) {
-			if ( !( thread == this.stack && thread.length == 1 ) ) {
-				this.completeFrame( frame, thread );
-			}
-		}
-
-		return thread.length != prevLength;
 	}
 
-	completeFrame( frame: AnimFrame, thread: Array<AnimFrame> ) {
-		thread.pop();
+	private completeFrame( frame: AnimFrame, thread: Array<AnimFrame> ) {
 
 		// optionally set new defaults
 		for ( let key in frame.targets ) {
 			if ( frame.targets[key].setDefault ) {
-				if ( !( key in this.stack[0].targets ) ) {
-					console.warn( 'Anim.update: no default target for ' + key );
-				
-				} else {
-					this.stack[0].targets[key].value = frame.targets[key].value;
-				}
+				this.setDefault( key, frame.targets[key] );
 			}
 		}
 
@@ -775,43 +799,47 @@ export class Anim {
 		}
 	}
 
-	clear( options: ClearOptions={} ) {
-		if ( !options.withTag && !options.withoutTag ) {
-			for ( let thread of this.threads ) {
-				let minIndex = 0;
-				if ( thread == this.stack ) minIndex = 1; 
-
-				while ( thread.length > minIndex ) {
-					thread.pop();
-				}
+	private clearAllThreads() {
+		for ( let thread of this.threads ) {
+			while ( thread.length > 0 ) {
+				thread.pop();
 			}
-
-			if ( Debug.LOG_ANIM ) {
-				console.log( this.name + ': cleared threads' );
-			}
-
-			return;
 		}
 
+		if ( Debug.LOG_ANIM ) {
+			console.log( this.name + ': cleared threads' );
+		}
+	}
+
+	private clearByTag( withTag: string, withoutTag: string ) {
 		let removed = [];
 
 		for ( let thread of this.threads ) {
-			for ( let i = thread.length - 1; i >= 1; i-- ) {
-				if ( options.withTag && thread[i].tag == options.withTag ) {
+			for ( let i = thread.length - 1; i >= 0; i-- ) {
+				if ( withTag && thread[i].tag == withTag ) {
 					removed.push( thread.splice( i, 1 ) );
 				
-				} else if ( options.withoutTag && thread[i].tag != options.withoutTag ) {
+				} else if ( withoutTag && thread[i].tag != withoutTag ) {
 					removed.push( thread.splice( i, 1 ) );
 				}
 			}
 
 			if ( Debug.LOG_ANIM ) {
 				let tags = [];
-				if ( options.withTag ) tags.push( options.withTag );
-				if ( options.withoutTag ) tags.push( '^' + options.withoutTag );
+				if ( withTag ) tags.push( withTag );
+				if ( withoutTag ) tags.push( '^' + withoutTag );
 
 				console.log( this.name + ': removed ' + removed.length + 'frames (' + tags.join(',') + ')' );
 			}
+		}
+	}
+
+	clear( options: ClearOptions={} ) {
+		if ( !options.withTag && !options.withoutTag ) {
+			this.clearAllThreads();
+
+		} else {
+			this.clearByTag( options.withTag, options.withoutTag );
 		}
 	}
 }
