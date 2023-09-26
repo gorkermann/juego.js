@@ -1,4 +1,5 @@
 type HSLA = {h: number, s: number, l: number, a: number}
+type RGBA = {r: number, g: number, b: number, a: number}
 
 let shaders: Array<( mat: Material ) => HSLA> = [];
 
@@ -34,8 +35,12 @@ shaders.push(
 		} 
 	} );
 
-export function toFillStyle( color: HSLA ): string {
+export function HSLAtoFillStyle( color: HSLA ): string {
 	return 'hsla(' + color.h + ',' + color.s * 100 + '%,' + color.l * 100 + '%,' + color.a * 100 + '%)';
+}
+
+export function RGBAtoFillStyle( color: RGBA ): string {
+	return 'rgba(' + color.r * 255 + ',' + color.g * 255 + ',' + color.b * 255 + ',' + color.a + ')';
 }
 
 export class Material {
@@ -97,6 +102,34 @@ export class Material {
 	}
 
 	getFillStyle(): string {
-		return toFillStyle( this.getHSLA() );
+		return HSLAtoFillStyle( this.getHSLA() );
+	}
+
+	getRGBA(): RGBA {
+		let color = this.getHSLA();
+
+		let r, g, b: number;
+
+		if ( color.s === 0) {
+			r = g = b = color.l; // achromatic
+
+		} else {
+			const q = color.l < 0.5 ? color.l * (1 + color.s) : color.l + color.s - color.l * color.s;
+			const p = 2 * color.l - q;
+			r = this.hueToRgb(p, q, color.h + 120);
+			g = this.hueToRgb(p, q, color.h );
+			b = this.hueToRgb(p, q, color.h - 120);
+		}
+
+		return { r: r, g: g, b: b, a: color.a };
+	}
+
+	hueToRgb( p: number, q: number, t: number ) {
+		if (t < 0) t += 360;
+		if (t > 360) t -= 360;
+		if (t < 60) return p + (q - p) * 6 * t / 360;
+		if (t < 180) return q;
+		if (t < 240) return p + (q - p) * 6 * (240 - t) / 360;
+		return p;
 	}
 }
