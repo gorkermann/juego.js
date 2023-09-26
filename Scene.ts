@@ -1,5 +1,6 @@
-import { Entity } from "./Entity.js"
-import { ScrollBox } from "./ScrollBox.js"
+import { Camera } from './Camera.js'
+import { Entity } from './Entity.js'
+import { ScrollBox } from './ScrollBox.js'
 import { Vec2 } from './Vec2.js'
 
 ///////////
@@ -11,8 +12,9 @@ import { Vec2 } from './Vec2.js'
 */
 
 export class Scene {
-	name: string = "";
+	name: string = '';
 	isLoaded: boolean = false;
+	camera: Camera = null;
 
 	constructor( name: string ) {
 		this.name = name;
@@ -39,6 +41,10 @@ export class Scene {
 	update() {}
 
 	updateCursor( pos: Vec2 ) {}
+
+	useCamera( camera: Camera ) {
+		this.camera = camera;
+	}
 
 	draw( context: CanvasRenderingContext2D ) {}
 }
