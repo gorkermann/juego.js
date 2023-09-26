@@ -345,9 +345,19 @@ export class Anim {
 		}
 	}
 
-	isDone(): boolean {
-		for ( let thread of this.threads ) {
-			if ( thread.length > 0 ) return false;
+	isDone( threadIndices: Array<number>=[] ): boolean {
+		if ( threadIndices.length > 0 ) {
+			for ( let index of threadIndices ) {
+				if ( index >= this.threads.length ) {
+					throw new Error( this.name + ': index out of range (' + index + '>' + this.threads.length + ')' );
+				}
+
+				if ( this.threads[index].length > 0 ) return false;
+			}
+		} else {
+			for ( let thread of this.threads ) {
+				if ( thread.length > 0 ) return false;
+			}
 		}
 
 		return true;
