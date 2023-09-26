@@ -140,8 +140,9 @@ function test_crush( tf: TestFuncs ) {
 	tf.ASSERT_EQ( result.crushed, true );
 
 
-	/* chamfer ceiling */
+	/* angled ceiling */
 
+	// TODO: player doesn't get crushed if they travel into a V
 	let entities2 = [floor, chamfer, player];
 	let offset: Vec2;
 

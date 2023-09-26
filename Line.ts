@@ -96,10 +96,10 @@ export class Line {
 			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
 
 			if ( slope1 != slope2 ) {
-				let yInt2 = line.p1.y - this.p1.y - (line.p1.x - this.p1.x) * slope2;
+				let yInt2 = line.p1.y - this.p1.y - (line.p1.x - this.p1.x) * slope2; // use this.p1 as origin
 
-				let intX = yInt2 / ( slope1 - slope2 ) + this.p1.x;
-				let intY = (intX - this.p1.x) * slope2 + yInt2 + this.p1.y
+				let intX = yInt2 / ( slope1 - slope2 ) + this.p1.x; // yInt1 is 0 with this.p1 as origin
+				let intY = ( intX - this.p1.x ) * slope2 + yInt2 + this.p1.y; // y = mx + b
 
 				if ( between( intX, this.p1.x, this.p2.x ) && 
 					 ( between( intX, line.p1.x, line.p2.x ) || infinite ) &&

@@ -43,18 +43,20 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let blockedDirs: Array<SolverDir> = [];
 	let pushDirs: Array<SolverDir> = [];
 
+	let minPartialStep = 0.05;
+
 	let babyStep = true;
 	let iterations = 0;
 
 	while ( stepTotal < step ) {
 		let partialStep = step - stepTotal;
 
-		if ( babyStep ) partialStep = 0.06; // slightly more than threshold so collision runs once
+		if ( babyStep ) partialStep = minPartialStep + 0.01; // slightly more than threshold so collision runs once
 		babyStep = false;
 
 		let solidContacts = [];
 
-		while ( partialStep > 0.05 ) {
+		while ( partialStep > minPartialStep ) {
 			solidContacts = [];
 			contacted = null;
 
@@ -98,38 +100,39 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			
 			//pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
 
-			// player hits something, cancel player velocity in object direction
+			/* player hits something, cancel player velocity in object direction */
 			let ndot = entity.vel.dot( contact.normal );
-			let before = entity.vel.copy();
-
+			
 			if ( ndot <= 0 ) {
 				pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
 
 				let advance = stepTotal;// - lastTotal;
-				if ( advance < 0.05 ) advance = 0; // at wall, running into wall, don't move at all
+				if ( advance < minPartialStep ) advance = 0; // at wall, running into wall, don't move at all
 
 				entity.pos.add( entity.vel.times( advance ) );
-				entity.vel.sub( contact.normal.times( ndot )).scale( 1 - advance );
+				entity.vel.sub( contact.normal.times( ndot ) ).scale( 1 - advance );
 
 				lastTotal = stepTotal; // not sure if this is necessary
 			}
 
-			// object pushes player
+			/* object pushes player */
 			let push = contact.vel.copy();
 
-			let v1 = entity.vel.unit();
-			let v2 = contact.vel.unit();
+			// cancel part of contact velocity parallel to player velocity (i.e. don't double-add this)
+			let dir = contact.vel.unit();
+			let vdot = dir.dot( entity.vel );
 
-			if ( v1.dot( v2 ) > 0 ) {
-				push.sub( contact.vel.times( v1.dot( v2 ) ) );
+			if ( vdot > 0 ) {
+				push.sub( dir.times( vdot ) );
 			}
 			
+			// add push to player velocity
 			let ahead = entity.pos.minus( contact.point ).dot( push ) > 0;
 			if ( ahead ) {
 				entity.vel.add( push.times( step - stepTotal ) );
 
 				// potential crush directions
-				pushUnique( { dir: contact.vel.unit(), contact: contact }, pushDirs, solverDirCompare );
+				pushUnique( { dir: dir, contact: contact }, pushDirs, solverDirCompare );
 			}
 		}
 

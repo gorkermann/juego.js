@@ -365,4 +365,45 @@ tests.push( new Test( 'Shape',
 					   'vertIntersectCount'], 
 					  [] ) );
 
+function test_getBodyContact( tf: TestFuncs ) {
+    let e = new Entity( new Vec2( 50, 50 ), 100, 100 );
+    let s = e.getOwnShapes()[0];
+    
+    let s2 = Shape.makeRectangle( new Vec2( 50, 25 ), 100, 50 ); // partially inside s, contains no points of s
+    let s3 = Shape.makeRectangle( new Vec2( 50, 50 ), 100, 100 ); // mutually contains points with s
+    let s4 = Shape.makeRectangle( new Vec2( 0, 0 ), 100, 100 ); // same as s
+
+    tf.ASSERT_EQ( s.getBodyContact( s2 ), null );
+    tf.ASSERT_EQ( s2.getBodyContact( s ), null );
+    tf.ASSERT_EQ( s.getBodyContact( s3 ), null );
+    tf.ASSERT_EQ( s3.getBodyContact( s ), null );
+    tf.ASSERT_EQ( s.getBodyContact( s4 ), null );
+    tf.ASSERT_EQ( s4.getBodyContact( s ), null );
+
+    let e5 = new Entity( new Vec2( 50, 50 ), 10, 10 );
+    let s5 = e5.getOwnShapes(  )[0];
+
+    let contact = s.getBodyContact( s5 );
+    tf.ASSERT( contact !== null );
+    tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+    tf.ASSERT_EQ( contact.normal, new Vec2( 1, 0 ) ); // default normal
+
+    contact = s5.getBodyContact( s );
+    tf.ASSERT( contact !== null );
+    tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+    tf.ASSERT_EQ( contact.normal, new Vec2( 1, 0 ) ); // default normal
+
+    e5.vel = new Vec2( 0, 1 );
+    contact = s.getBodyContact( s5 );
+    tf.ASSERT( contact !== null );
+    tf.ASSERT_EQ( contact.vel, new Vec2( 0, 1 ) );
+    tf.ASSERT_EQ( contact.normal, new Vec2( 0, 1 ) ); // e hit by e5, which is moving down
+
+    contact = s5.getBodyContact( s );
+    tf.ASSERT( contact !== null );
+    tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+    tf.ASSERT_EQ( contact.normal, new Vec2( 0, -1 )); // e5, which is moving down, hits e
+}
+tests.push(new Test('Shape', test_getBodyContact, ['getBodyContact'], []));
+
 export default tests;

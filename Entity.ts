@@ -342,6 +342,26 @@ export class Entity {
 		this.angle += this.angleVel * step;
 	}
 
+	treeCollisionGroup(): number {
+		let result = this.collisionGroup;
+
+		for ( let sub of this.getSubs() ) {
+			result |= sub.treeCollisionGroup();
+		}
+
+		return result;
+	}
+
+	treeCollisionMask(): number {
+		let result = this.collisionMask;
+
+		for ( let sub of this.getSubs() ) {
+			result |= sub.treeCollisionMask();
+		}
+
+		return result;
+	}
+
 	// Check if this entity's bounding rectangle overlaps another entity's bounding rectangle
 	canBeHitBy ( otherEntity: Entity ): boolean {
 		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup ) > 0;
@@ -376,7 +396,7 @@ export class Entity {
 
 				if ( !sub.canBeHitBy( otherSub ) ) continue;
 
-				contact = shape.getShapeContact( otherShape );
+				contact = shape.getEdgeContact( otherShape );
 
 				if ( contact ) {
 					contact.sub = sub;

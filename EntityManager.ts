@@ -67,10 +67,6 @@ export class EntityManager {
 		this.entities = [];
 	}
 
-	takeInput() {
-
-	}
-
 	/* Import/Export */
 
 	// clear current primtives and load new ones
@@ -147,6 +143,12 @@ export class EntityManager {
 		if ( this.entities.includes( entity ) ) return;
 		
 		this.entities.push( entity );
+	}
+
+	insertList( entities: Array<Entity> ) {
+		for ( let entity of entities ) {
+			this.insert( entity );
+		}
 	}
 
 	/* Drawing */

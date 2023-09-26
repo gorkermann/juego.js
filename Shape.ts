@@ -16,6 +16,8 @@ import { between } from './util.js'
 
 import { Debug } from "./Debug.js"
 
+let zeroVector = new Vec2( 0, 0 );
+
 type WorldPoint = Vec2
 type LocalPoint = Vec2
 type Dir = Vec2
@@ -339,30 +341,72 @@ export class Shape {
 		return false;
 	}
 
-	getShapeBodyContact( otherShape: Shape ): Contact | null {
+	/**
+	 * only to be used if getEdgeContact fails (harder to determine normals from this sort of contact)
+	 * 
+	 * @param  {Shape}   otherShape [description]
+	 * @return {Contact}            [description]
+	 */
+	getBodyContact( otherShape: Shape ): Contact | null {
 		let contained = [];
+		let insideThis = false;
+		let insideOther = false;
 
-		for ( let point of otherShape.points ) {
-			if ( this.contains( point, 0.0, false ) ) {
-				contained.push( point );
+		if ( !this.hollow ) {
+			for ( let point of otherShape.points ) {
+				if ( this.contains( point, 0.0, false ) ) {
+					contained.push( point );
+					insideThis = true;
+				}
 			}
 		}
 
-		if ( contained.length == 0 ) return null;
+		if ( !otherShape.hollow ) {
+			for ( let point of this.points ) {
+				if ( otherShape.contains( point, 0.0, false ) ) {
+					contained.push( point );
+					insideOther = true;
+				}
+			}
+		}
 
-		let vel = otherShape.getVel( contained[0] ); // TODO: area center? or farthest along point on midline?
+		/* OK: no overlap */
 
-		let contact = new Contact( null, null, contained[0], vel.unit().flip() );
+		if ( contained.length == 0 ) return null;		
+
+		/* ERROR: these cases should have been found by getEdgeContact */
+		
+		// shapes have points inside one another (e.g. overlapping corners)
+		if ( insideOther && insideThis ) return null;
+
+		// not all points contained (point on edge, getEdgeContact rejected due to similar slopes)
+		if ( insideThis && contained.length < otherShape.points.length ) return null;
+		if ( insideOther && contained.length < this.points.length ) return null;
+
+		/* OK: one shape is completely inside the other */
+
+		let point = contained[0];
+		let vel = otherShape.getVel( point ); // TODO: find fastest velocity of contained points
+		let normal = vel.unit();
+		if ( normal.equals( zeroVector ) ) {
+			normal = this.getVel( point ).unit().flip();
+		}
+		if ( normal.equals( zeroVector ) ) {
+			normal = new Vec2( 1, 0 );
+		}
+
+		let contact = new Contact( null, null, point, normal );
 
 		contact.vel = vel;
-		contact.slice = 0.5;
-
+		contact.slice = 1.0; // insideThis: a shape is always to the right of its own normals
+							 // insideOther: something inside a shape to the right of the normals of that shape
 		return contact;
 	}
 
-	getShapeContact( otherShape: Shape ): Contact | null {
+	getEdgeContact( otherShape: Shape ): Contact | null {
 		let contact: Contact = null;
 		let inters: Array<EdgeContact> = [];
+		let sameEdgeIndex = -1;
 
 		// no points from other shape inside this one
 		for ( let edge of this.edges ) {
@@ -401,8 +445,7 @@ export class Shape {
 				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
 		*/
 		if ( inters.length < 1 ) {
-			if ( this.hollow ) return null;
-			else return this.getShapeBodyContact( otherShape );
+			return this.getBodyContact( otherShape );
 		}
 
 		// TODO: linear regression to find normal?
@@ -419,16 +462,24 @@ export class Shape {
 		} else if ( inters.length > 1 ) {
 			slice = this.slice( Line.fromPoints( inters[0].point, inters[1].point ) );
 
-			normal = inters[1].point.minus( inters[0].point ).normalize();
-			if ( slice > 0.5 ) {
-				normal.rotate( -Math.PI / 2 )	
-			} else {
-				normal.rotate( Math.PI / 2 );
+			let sameEdge = true;
+			for ( let inter of inters ) {
+				if ( inter.index != inters[0].index ) sameEdge = false;
+			}
+
+			if ( !sameEdge ) {
+				normal = inters[1].point.minus( inters[0].point ).normalize();
+				if ( slice > 0.5 ) {
+					normal.rotate( -Math.PI / 2 )	
+				} else {
+					normal.rotate( Math.PI / 2 );
+				}
 			}
 
 			if ( inters.length > 2 ) console.log( 'oh boy' );
 
-			// a rotating object may create multiple contacts with different velocities
+			// compare velocities at intersections to find the fastest
+			// (a rotating object will create multiple contacts with different velocities)
 			let vel2 = otherShape.getVel( inters[1].point );
 
 			if ( vel2.lengthSq() > vel.lengthSq() ) {
