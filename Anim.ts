@@ -97,7 +97,7 @@ function getRate( step: number, elapsed: number, targetKey: string, field: AnimF
 	let rate = 0;
 
 	rate = field.rate;
-	if ( target.overrideRate ) rate = target.overrideRate;
+	if ( target.overrideRate !== undefined ) rate = target.overrideRate;
 
 	if ( rate < 0 ) {
 		throw new Error( 'Anim.getRate: negative rate for field ' + targetKey );
