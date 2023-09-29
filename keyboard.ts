@@ -65,7 +65,9 @@ enum KeyState {
 	DOUBLETAPPED,
 }
 
+let hitCounter: Array<KeyState> = [];
 let state: Array<KeyState> = [];
+
 let keyLastHit: Array<KeyState> = [];
 let updateCounter = 0;
 let doubleTapInterval = 5;
@@ -75,11 +77,20 @@ export class Keyboard {
 
 	}
 
+	static getHits( key: KeyCode ): number { 
+		return hitCounter[key];
+	}
+
 	static downHandler( e: any ) {
 		if ( Debug.LOG_KEYBOARD ) console.log( "Key " + e.keyCode + " down" );
 		
 		if ( Keyboard.keyUp ( e.keyCode ) ) {
-			state[e.keyCode] = KeyState.HIT;	
+			state[e.keyCode] = KeyState.HIT;
+
+			if ( !( e.keyCode in hitCounter ) ) {
+				hitCounter[e.keyCode] = 0;	
+			}
+			hitCounter[e.keyCode] += 1;
 		}
 	}
 
@@ -87,9 +98,10 @@ export class Keyboard {
 		if ( Debug.LOG_KEYBOARD ) console.log( "Key " + e.keyCode + " up" );
 
 		state[e.keyCode] = KeyState.LETGO;
-		if ( updateCounter - keyLastHit[e.keyCode] < doubleTapInterval )  {
+		/*if ( updateCounter - keyLastHit[e.keyCode] < doubleTapInterval )  {
 			state[e.keyCode] = KeyState.DOUBLETAPPED;
-		}
+		}*/
+
 		keyLastHit[e.keyCode] = updateCounter;
 	}
 
@@ -135,6 +147,8 @@ export class Keyboard {
 			if ( state[code] == KeyState.LETGO || state[code] == KeyState.DOUBLETAPPED ) {
 				state[code] = KeyState.UP;
 			}
+
+			hitCounter[code] = 0;
 		}
 
 		updateCounter++;
@@ -146,6 +160,8 @@ export class Keyboard {
 
 			state[code] = KeyState.UP;
 			keyLastHit[code] = -Infinity;
+
+			hitCounter[code] = 0;
 		}
 	}
 
