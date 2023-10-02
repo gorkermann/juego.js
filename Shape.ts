@@ -266,14 +266,6 @@ export class Shape {
 		// Sort in order of closest to farthest
 		rayHits.sort( closestTo( ray.p1 ) );
 
-		for ( let point of this.points ) {
-			for ( let hit of rayHits ) {
-				if ( point.distTo( hit.point ) < 2 ) {
-					//hit.material.hue += 10;
-				}
-			}
-		}
-
 		return rayHits;	
 	}
 
@@ -406,9 +398,7 @@ export class Shape {
 	getEdgeContact( otherShape: Shape ): Contact | null {
 		let contact: Contact = null;
 		let inters: Array<EdgeContact> = [];
-		let sameEdgeIndex = -1;
 
-		// no points from other shape inside this one
 		for ( let edge of this.edges ) {
 			for ( let i = 0; i < otherShape.edges.length; i++ ) {
 				let point = edge.intersects( otherShape.edges[i] );
@@ -422,6 +412,7 @@ export class Shape {
 				*/
 				let anyEqual = false;
 
+				// throw out similar points (reducing epsilon a bit here)
 				for ( let inter of inters ) {
 					if ( point.equals( inter.point, 0.001 ) ) anyEqual = true;
 				}
@@ -449,26 +440,41 @@ export class Shape {
 		}
 
 		// TODO: linear regression to find normal?
-		// or at least use the two points farthest apart, throw out similar points
-		// if single corner point, use the flipped normal of the other edge
-		let point = inters[0].point;
-		let vel = otherShape.getVel( point ); // should use step here?
-		let normal = otherShape.normals[ inters[0].index ];
-		let slice = 0.0;
+		let point: Vec2;
+		let vel: Vec2; // should use step for this?
+		let normal: Vec2;
+		let slice: number;
 
 		if ( inters.length == 1 ) {
+			point = inters[0].point;
+			vel = otherShape.getVel( point );
+			normal = otherShape.normals[ inters[0].index ];
 			slice = this.slice( otherShape.edges[ inters[0].index ] );
 
 		} else if ( inters.length > 1 ) {
-			slice = this.slice( Line.fromPoints( inters[0].point, inters[1].point ) );
+			let inter0, inter1: EdgeContact;
+			let len, maxLenSq = 0;
 
-			let sameEdge = true;
-			for ( let inter of inters ) {
-				if ( inter.index != inters[0].index ) sameEdge = false;
+			for ( let i = 0; i < inters.length; i++ ) {
+				for ( let j = i + 1; j < inters.length; j++ ) {
+					len = inters[i].point.distToSq( inters[j].point );
+
+					if ( len > maxLenSq ) {
+						inter0 = inters[i];
+						inter1 = inters[j];
+						maxLenSq = len;
+					}
+				}
 			}
 
-			if ( !sameEdge ) {
-				normal = inters[1].point.minus( inters[0].point ).normalize();
+			point = inter0.point;
+			slice = this.slice( Line.fromPoints( inter0.point, inter1.point ) );
+
+			if ( inter0.index == inter1.index ) {
+				normal = otherShape.normals[ inter0.index ].copy();
+
+			} else {
+				normal = inter1.point.minus( inter0.point ).normalize();
 				if ( slice > 0.5 ) {
 					normal.rotate( -Math.PI / 2 )	
 				} else {
@@ -476,15 +482,16 @@ export class Shape {
 				}
 			}
 
-			if ( inters.length > 2 ) console.log( 'oh boy' );
+			//if ( inters.length > 2 ) console.log( 'oh boy' );
 
 			// compare velocities at intersections to find the fastest
 			// (a rotating object will create multiple contacts with different velocities)
-			let vel2 = otherShape.getVel( inters[1].point );
+			vel = otherShape.getVel( inter0.point );
+			let vel1 = otherShape.getVel( inter1.point );
 
-			if ( vel2.lengthSq() > vel.lengthSq() ) {
-				point = inters[1].point;
-				vel = vel2;
+			if ( vel1.lengthSq() > vel.lengthSq() ) {
+				point = inter1.point;
+				vel = vel1;
 			}
 		}
 
@@ -629,16 +636,163 @@ export class Shape {
 		return leftArea / this.getArea();
 	}
 
+	getEdgeMaterial( index: number ): Material {
+		if ( index > this.edges.length ) {
+			throw new Error( 'Shape.getEdgeMaterial: Index out of range ( ' + index + '>' + this.edges.length + ')' );
+		}
+
+		let material = this.edges[index].material;
+		if ( !material ) material = this.material;
+
+		return material;
+	}
+
+	startPathAt( context: CanvasRenderingContext2D, index: number ): Material {
+		if ( index > this.points.length ) {
+			throw new Error( 'Shape.startPathAt: Index out of range ( ' + index + '>' + this.points.length + ')' );
+		}
+
+		let material = this.getEdgeMaterial( index );
+		context.strokeStyle = material.getFillStyle();
+
+		context.beginPath();
+		context.moveTo( this.points[index].x, this.points[index].y );
+
+		return material;
+	}
+
+	sphericalStroke( context: CanvasRenderingContext2D, origin: Vec2, ir: number, lens: number ): void {
+		context.lineWidth = 1;
+
+		//let material = this.startPathAt( context, 0 );
+		context.strokeStyle = this.material.getFillStyle();
+		let startIndex = -1;
+		let iNext: number;
+
+		context.beginPath();
+
+		let v: Array<Vec2> = this.points.map( x => x.minus( origin ) );
+		let v1, v2: Vec2;
+
+		for ( let i = 0; i < this.points.length; i++ ) {
+			iNext = ( i + 1 ) % this.points.length;
+
+			v1 = v[i];
+			let r1 = ir - ir * lens / ( v1.length() ** 0.5 + 1 );
+			v2 = v[iNext];
+
+			let diff = v2.minus( v1 );
+			let dist = diff.length();
+			if ( diff.length() == 0 ) continue;
+
+			let uDiff = diff.unit();
+
+			let l = 0;
+			let maxAngle = 4 / 180 * Math.PI;
+
+			let p, d: Vec2;
+
+			do {
+				p = v1.alongTo( v2, l / dist );
+				let pLen = p.length();
+				let r = ir - ir * lens / ( pLen ** 0.5 + 1 );
+				d = p.times( r / pLen ).plus( origin );
+
+				if ( startIndex < 0 ) {
+					context.moveTo( d.x, d.y );
+					startIndex = i;
+
+				} else {
+					context.lineTo( d.x, d.y );
+				}
+
+				let dot = p.dot( uDiff ) / pLen;
+				let angle = Math.acos( dot );
+				if ( dot < 0 ) angle = Math.PI - angle;
+				let phi = Math.PI - angle - maxAngle;
+
+				if ( phi < 0 ) break;
+
+				l += pLen * Math.sin( maxAngle ) / Math.sin( phi );
+				//last = p;
+
+			} while ( l < dist );
+
+			/*if ( i == 0 ) {
+				context.beginPath();
+				context.moveTo( v.x, v.y );
+			} else {
+				context.lineTo( v.x, v.y );//this.points[i].x, this.points[i].y );
+			}*/
+
+			//if ( material != this.getEdgeMaterial( i ) ) {
+				//context.stroke();
+
+				//material = this.startPathAt( context, i );
+				//startIndex = i;
+			//}
+		}
+
+		/*if ( startIndex == 0 ) {
+			context.closePath();
+		} else {
+			//context.lineTo( this.points[0].x, this.points[0].y );
+		}*/
+		context.closePath();
+		context.stroke();
+	}
+
 	stroke( context: CanvasRenderingContext2D ): void {
 		context.lineWidth = 1;
 
-		for ( let edge of this.edges ) {
-			context.strokeStyle = this.material.getFillStyle();
-			if ( edge.material ) context.strokeStyle = edge.material.getFillStyle();
+		let material = this.startPathAt( context, 0 );
+		context.strokeStyle = this.material.getFillStyle();
+		let startIndex = -1;
 
-			edge.draw( context );
+		context.beginPath();
+
+		for ( let i = 0; i < this.points.length; i++ ) {
+			if ( i == 0 ) {
+				context.beginPath();
+				context.moveTo( this.points[i].x, this.points[i].y );
+			} else {
+				context.lineTo( this.points[i].x, this.points[i].y );
+			}
+
+			if ( material != this.getEdgeMaterial( i ) ) {
+				context.stroke();
+
+				material = this.startPathAt( context, i );
+				startIndex = i;
+			}
 		}
+
+		if ( startIndex == 0 ) {
+			context.closePath();
+		} else {
+			context.lineTo( this.points[0].x, this.points[0].y );
+		}
+
+		context.stroke();
 	}
+
+	/*
+		ellipse thing
+
+			let v1 = this.points[i].minus( origin );
+			let r1 = 190.5 - 190.5 / ( Math.sqrt( v1.length() ) + 1 );
+			let v2 = this.points[iNext].minus( origin );
+			let r2 = 190.5 - 190.5 / ( Math.sqrt( v2.length() ) + 1 );
+
+			let cos = v1.dot( v2 ) / v1.length() / v2.length();
+			let theta = Math.acos( cos );
+			let r2cos = ( r2 * cos ) ** 2;
+			let b = Math.sqrt( Math.abs( (r2*r2 - r2cos ) / ( 1 - r2cos / ( r1*r1 ) ) ) );
+			let cross = v1.cross( v2 );
+
+			context.ellipse( origin.x, origin.y, r1, b, v1.angle(), 0, theta * ( cross < 0 ? -1 : 1 ), cross < 0 );
+
+	 */
 
 	fill( context: CanvasRenderingContext2D ): void {
 		context.fillStyle = this.material.getFillStyle();

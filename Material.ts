@@ -105,6 +105,10 @@ export class Material {
 		return HSLAtoFillStyle( this.getHSLA() );
 	}
 
+	/**
+	 * from here https://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
+	 * @return {RGBA} [description]
+	 */
 	getRGBA(): RGBA {
 		let color = this.getHSLA();
 

@@ -92,16 +92,6 @@ export class EntityManager {
 
 	/* Update */
 
-	collide( grid: GridArea ) {
-		for ( let entity of this.entities ) {
-			entity.clearCollisionData();
-		}
-
-		for ( let entity of this.entities ) {
-			grid.collide( entity );
-		}
-	}
-
 	update( step: number, elapsed: number ) {
 		for ( let entity of this.entities ) {
 			entity.update( step, elapsed );
@@ -141,6 +131,10 @@ export class EntityManager {
 
 	insert( entity: Entity ) {
 		if ( this.entities.includes( entity ) ) return;
+
+		if ( !entity.collisionGroup && !entity.isGhost ) {
+			throw new Error( 'EntityManager.insert: Entity has no collision group set' );
+		}
 		
 		this.entities.push( entity );
 	}
@@ -162,7 +156,6 @@ export class EntityManager {
 	draw( context: CanvasRenderingContext2D ) {
 		for ( let entity of this.entities ) {
 			entity.draw( context );
-			if ( Debug.LOG_COLLISION ) entity.drawCollisionBox( context );
 		}
 	}
 }

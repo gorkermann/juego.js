@@ -17,7 +17,7 @@ export function discRand(min: number, max: number): number {
 }
 
 export function between( val: number, u1: number, u2: number ) {
-	let fudge = 0.01;
+	let fudge = 0.0001;
 
 	return ( ( val >= u1 - fudge && val <= u2 + fudge ) || 
 			 ( val >= u2 - fudge && val <= u1 + fudge ) );

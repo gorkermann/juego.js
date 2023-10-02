@@ -49,18 +49,6 @@ export enum TransformOrder {
 	ROTATE_THEN_TRANSLATE
 }
 
-class Vortex {
-	pos: Vec2;
-	life: number;
-	material: Material;
-
-	constructor( pos: Vec2, life: number, material: Material ) {
-		this.pos = pos;
-		this.life = life;
-		this.material = material;
-	}
-}
-
 export class Entity {
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
@@ -84,6 +72,7 @@ export class Entity {
 	// Entity accepts collisions from these groups
 	// only set for "intelligent" entities that handle collisions
 	collisionMask: number = 0x00; 
+	isPliant: boolean = false;
 
 	material: Material = new Material( 0, 0, 0 );
 	
@@ -335,6 +324,8 @@ export class Entity {
 	// Some other entity has overlapped this one, do something
 	hitWith( otherEntity: Entity, contact: Contact ): void {}
 
+	watch( pos: Vec2 ): void {}
+
 	// Move, change state, spawn stuff
 	update( step: number, elapsed: number ): void {
 		this.pos.add( this.vel.times( step ) );
@@ -409,110 +400,6 @@ export class Entity {
 		return contacts;
 	}
 
-	/*
-		collide*()
-
-		handlers for wall hits
-	*/
-	onCollideLeft() {
-		this.vel.x = 0;
-		this.collideLeft = true;
-	}
-
-	onCollideRight() {
-		this.vel.x = 0;
-		this.collideRight = true;
-	}
-
-	onCollideUp() {
-		this.vel.y = 0;
-		this.collideUp = true;
-	}
-
-	onCollideDown() {
-		this.vel.y = 0;
-		this.collideDown = true;
-	}
-
-	/*
-		collideWith()
-		Check if two Entities collide and correct any overlap
-		Caller is Entity 1
-
-		staticEntity: some Entity without velocity, aka Entity 2
-	*/
-	collideWith( staticEntity: Entity ): void {
-		let left1: number = this.pos.x;
-		let left2: number = staticEntity.pos.x;
-		let right1: number = this.pos.x + this.width;
-		let right2: number = staticEntity.pos.x + staticEntity.width;
-		let top1: number = this.pos.y;
-		let top2: number = staticEntity.pos.y;
-		let bottom1: number = this.pos.y + this.height;
-		let bottom2: number = staticEntity.pos.y + staticEntity.height;
-		
-		let collisionOccurred: boolean = false;
-
-		let bottom: boolean = bottom1 + this.vel.y > top2;
-		let top: boolean = top1 + this.vel.y < bottom2;
-		let right: boolean = right1 + this.vel.x > left2;
-		let left: boolean = left1 + this.vel.x < right2;
-
-		if ( bottom && top && left && right ) {
-			if ( bottom1 <= top2 ) {
-				this.onCollideDown();
-				this.pos.y = top2 - this.height;
-				collisionOccurred = true;
-		
-			} else if ( top1 >= bottom2 ) {
-				this.onCollideUp();
-				this.pos.y = bottom2;
-				collisionOccurred = true;
-
-			} else if ( right1 <= left2 ) {
-				this.onCollideRight();
-				this.pos.x = left2 - this.width;
-				collisionOccurred = true;
-
-			} else if ( left1 >= right2 ) {
-				this.onCollideLeft();
-				this.pos.x = right2;
-				collisionOccurred = true;
-			} else {
-				// if none of the above are true, then the Entities overlap
-			}
-		}
-
-		if ( !collisionOccurred ) {
-
-			// probe vertically
-			if ( this.vel.y == 0 ) {
-				if ( top && left && right && bottom1 + 1 > top2 ) {
-					this.onCollideDown();
-					this.pos.y = top2 - this.height;
-				}
-
-				if ( bottom && left && right && top1 - 1 < bottom2 ) {
-					this.onCollideUp();
-					this.pos.y = bottom2;
-				}
-			}
-
-			// probe horizontally
-			if ( this.vel.x == 0 ) {
-				if ( bottom && top && left && right1 + 1 > left2 ) {
-					this.onCollideRight();
-					this.pos.x = left2 - this.width;
-				}
-
-				if ( bottom && top && right && left1 - 1 < right2 ) {
-					this.onCollideLeft();
-					this.pos.x = right2;
-				}
-			}
-		}
-	}
-
 	shade() {
 		for ( let sub of this.getSubs() ) {
 			sub.shade();
@@ -538,46 +425,6 @@ export class Entity {
 			} else {
 				shape.fill( context );
 			}
-		}
-	}
-
-	/*
-		drawCollisionBox()
-		Draw this entity's bounding rectangle
-	
-		context: an HTML5 2D drawing context to draw with
-	*/
-	drawCollisionBox( context: CanvasRenderingContext2D ) {
-		if ( Debug.LOG_COLLISION ) {
-		
-			// Collision Box
-			context.fillStyle = "gray";
-			if ( this.mouseHover ) context.fillStyle = "red";
-			if ( this.mouseSelected ) context.fillStyle = "green";
-			context.globalAlpha = 0.6;
-			context.fillRect( this.pos.x, this.pos.y, this.width, this.height );
-
-			//  Rectangles to indicate collision
-			context.fillStyle = "black";
-
-			if ( this.collideDown ) { 
-				context.fillRect(this.pos.x + this.width / 4, this.pos.y + this.height * 3 / 4,
-								 this.width / 2, this.height / 4);
-			}
-			if ( this.collideUp ) { 
-				context.fillRect(this.pos.x + this.width / 4, this.pos.y, 
-								 this.width / 2, this.height / 4);
-			}
-			if ( this.collideLeft ) { 
-				context.fillRect(this.pos.x, this.pos.y + this.height / 4,
-								 this.width / 4, this.height / 2);
-			}
-			if ( this.collideRight ) { 
-				context.fillRect(this.pos.x + this.width * 3 / 4,
-								 this.pos.y + this.height / 4, this.width / 4, this.height / 2);
-			}
-
-			context.globalAlpha = 1.0;
 		}
 	}
 }
