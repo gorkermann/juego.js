@@ -49,6 +49,8 @@ export class Material {
 	lum: number = 0.0; // 0.0-1.0
 	alpha: number = 1.0; // 0.0-1.0
 
+	emit: number = 0.0;
+
 	shaderIndex: number = 0;
 
 	skewH: number = 0.0;
@@ -71,6 +73,8 @@ export class Material {
 		mat.skewH = this.skewH;
 		mat.skewS = this.skewS;
 		mat.skewL = this.skewL;
+
+		mat.emit = this.emit;
 
 		return mat;
 	}
