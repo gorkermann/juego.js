@@ -62,8 +62,61 @@ export class Line {
 		returns: the intersection point, or null
 	*/ 
 	intersects( line: Line, infinite: boolean=false ): Vec2 | null {
-		let result = null;	
 
+		/*
+		// bounding box filter
+		if ( !infinite ) {
+			if ( line.p1.x > this.p1.x && line.p1.x > this.p2.x &&
+				 line.p2.x > this.p1.x && line.p2.x > this.p2.x ) return null;
+
+			if ( line.p1.x < this.p1.x && line.p1.x < this.p2.x &&
+				 line.p2.x < this.p1.x && line.p2.x < this.p2.x ) return null;
+				 
+			if ( line.p1.y > this.p1.y && line.p1.y > this.p2.y &&
+				 line.p2.y > this.p1.y && line.p2.y > this.p2.y ) return null;
+
+			if ( line.p1.y < this.p1.y && line.p1.y < this.p2.y &&
+				 line.p2.y < this.p1.y && line.p2.y < this.p2.y ) return null;
+		}
+
+
+		// cross product filter
+		let v: Array<number>;
+		let side1, side2: number;
+
+		// points of line on same side of this
+		if ( !infinite ) {
+			v = [
+				 0, 0,
+				 this.p2.x - this.p1.x, this.p2.y - this.p1.y,
+				 line.p1.x - this.p1.x, line.p1.y - this.p1.y,
+				 line.p2.x - this.p1.x, line.p2.y - this.p1.y
+			];
+
+			side1 = v[2] * v[5] - v[4] * v[3];
+			side2 = v[2] * v[7] - v[6] * v[3];
+
+			if ( side1 < -1 && side2 < -1 ) return null;
+			if ( side1 > 1 && side2 > 1 ) return null;
+		}
+
+		// points of this on same side of line
+		v = [
+			 this.p1.x - line.p1.x, this.p1.y - line.p1.y,
+			 this.p2.x - line.p1.x, this.p2.y - line.p1.y,
+			 0, 0,
+			 line.p2.x - line.p1.x, line.p2.y - line.p1.y
+		];
+
+		side1 = v[6] * v[1] - v[0] * v[7];
+		side2 = v[6] * v[3] - v[2] * v[7];
+
+		if ( side1 < -1 && side2 < -1 ) return null;
+		if ( side1 > 1 && side2 > 1 ) return null;
+		*/
+
+		// find intersection
+		let result = null;
 		let dx_this = Math.abs( this.p2.x - this.p1.x );
 		let dx_line = Math.abs( line.p2.x - line.p1.x );
 
@@ -71,7 +124,7 @@ export class Line {
 			// both vertical, do nothing, return null
 
 	 	} else if ( dx_this < 0.01 ) {
-			let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
+	 		let slope2 = ( line.p2.y - line.p1.y ) / ( line.p2.x - line.p1.x );
 			let yInt2 = line.p1.y - ( line.p1.x - this.p1.x ) * slope2;
 
 			if ( between( yInt2, this.p1.y, this.p2.y ) && 
@@ -144,7 +197,8 @@ export class Line {
 
 	// check whether any of the points are on different sides of the line
 	/*
-		if the "line" is the infinite line drawn from the unit segment b:
+		if a is the vector from line.p1 to the point,
+		and the "line" is the infinite line drawn from the unit segment b:
 
 		|b| = 1
 		sin(theta) = opp / hyp = distance_to_line / |a|

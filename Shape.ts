@@ -37,6 +37,17 @@ function getTurnAngle( l1: Line, l2: Line ) {
 
 let VEL_EPSILON = 0.0001
 
+export class ShapeHit extends RayHit {
+	shape: Shape;
+	dist: number;
+	incidentDot: number;
+	normalDist: number;
+
+	constructor( point: Vec2, normal: Vec2, material: Material ) {
+		super( point, normal, material );
+	}
+}
+
 export enum LoopDir {
 	CW = 1,
 	CCW,
@@ -56,7 +67,6 @@ export class Shape {
 	normals: Array<Dir> = [];
 
 	material: Material = new Material( 0, 0, 0 );
-	materialTop: Material = null;
 
 	hollow: boolean = false;
 
@@ -86,9 +96,6 @@ export class Shape {
 		// copy materials
 		if ( !this.material ) s.material = null;
 		else s.material = this.material.copy(); 
-
-		if ( !this.materialTop ) s.materialTop = null;
-		else s.materialTop = this.materialTop.copy(); 
 
 		return s;
 	}
@@ -234,39 +241,40 @@ export class Shape {
 		return inters;
 	}
 
-	rayIntersect( ray: Line ): Array<RayHit> {
-		let rayHits = [];
+	rayIntersect( ray: Line ): Array<ShapeHit> {
+		let result: Array<ShapeHit> = [];
+		let minDistSq = 0;
 
-		for ( let edge of this.edges ) {
-			let hit = ray.rayIntersect( edge );
+		for ( let i = 0; i < this.edges.length; i++ ) {
+			let edge = this.edges[i];
+
+			let point = ray.intersects( edge );
 			
-			if ( hit !== null ) {
-				hit.material = this.material.copy();
-
-				let min = null;
-				let max = null;
-
-				for ( let point of this.points ) {
-					if ( min === null || point.y < min ) min = point.y;
-					if ( max === null || point.y > max ) max = point.y;
-				}
-
-				if ( this.materialTop !== null && hit.point.y < min + ( max - min ) / 10 ) {
-					hit.material = this.materialTop.copy();
-				}
+			if ( point !== null ) {
+				let hit = new ShapeHit( point, this.normals[i].copy(), null );
 
 				if ( edge.material ) {
 					hit.material = edge.material.copy();
+				} else {
+					hit.material = this.material.copy();
 				}
 
-				rayHits.push( hit );
+				hit.dist = hit.point.distTo( ray.p1 );
+
+				/*if ( !result || hit.dist < minDistSq ) {
+					result = hit;
+					minDistSq = hit.dist;
+				}*/
+				result.push( hit );
 			}
 		}
 		
 		// Sort in order of closest to farthest
-		rayHits.sort( closestTo( ray.p1 ) );
+		//rayHits.sort( closestTo( ray.p1 ) );
 
-		return rayHits;	
+		result.sort( ( a: ShapeHit, b: ShapeHit ) => a.dist - b.dist );
+
+		return result;
 	}
 
 	getTransformedBBox( step: number ): Shape {
@@ -796,7 +804,6 @@ export class Shape {
 
 	fill( context: CanvasRenderingContext2D ): void {
 		context.fillStyle = this.material.getFillStyle();
-		if ( this.materialTop ) context.fillStyle = this.materialTop.getFillStyle();
 
 		context.beginPath();
 		context.moveTo( this.points[0].x, this.points[0].y );
