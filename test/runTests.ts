@@ -14,16 +14,21 @@ type Dict<Type> = { [key: string]: Type };
 	to a coverage list (to be checked off later by tests)
 */
 function addCoverageReq( filename: string, mod: Dict<any>, coverage: Dict<Dict<string>> ) {
+	let ignoreProps = ['length', 'name', 'prototype'];
+
 	for ( let [key, obj] of Object.entries( mod ) ) {
 		if ( obj.prototype ) {
 		
 			// no way to distinguish between "classes" and "functions" among module members
 			// assume members only constructor in prototype are functions
-		
+
 			let funcs: Array<string> = Object.getOwnPropertyNames( obj.prototype );
-		
+
+			let staticProps = Object.getOwnPropertyNames( obj )
+									.filter( x => !ignoreProps.includes( x ) );
+
 			// standalone function
-			if ( funcs.length <= 1 ) {
+			if ( funcs.length <= 1 && staticProps.length < 1 ) {
 				let name = path.win32.basename( filename, '.js' ) + '.function';
 
 				if ( !coverage[name] ) {
@@ -32,7 +37,7 @@ function addCoverageReq( filename: string, mod: Dict<any>, coverage: Dict<Dict<s
 
 				coverage[name][key] = '';
 
-			// class
+			// class 
 			} else {
 				let members: Dict<string> = {};
 
@@ -42,14 +47,14 @@ function addCoverageReq( filename: string, mod: Dict<any>, coverage: Dict<Dict<s
 				}
 
 				// static functions
-				for ( let propName of Object.getOwnPropertyNames ( obj ) ) {
+				for ( let propName of staticProps ) {
 					if ( typeof( obj[propName] ) == 'function' ) {
 						members[propName] = '';
 					}
 				}
 
 				coverage[key] = members;
-			}					
+			}			
 		}
 	}
 }
@@ -60,6 +65,7 @@ function reportCoverage( coverage: Dict<Dict<string>> ) {
 	let ignoredCount = 0;
 
 	let items = [];
+	let colWidth = 32;
 
 	for ( let [key, obj] of Object.entries( coverage ) ) {
 		let subCount = 0;
@@ -82,15 +88,20 @@ function reportCoverage( coverage: Dict<Dict<string>> ) {
 		}
 
 		if ( subCovered < subCount ) {
-			let str = '\t\t\t(' + notCovered.slice(0, 30);
+			let str = key + ': ' + subCovered + '/' + subCount;
+			let tabCount = Math.floor( ( colWidth - str.length ) / 8 ) + 1;
 
-			if ( notCovered.length > 30 ) {
-				str += '... )';
+			for ( let i = 0; i < tabCount; i++ ) str += '\t';
+
+			str += '(' + notCovered.slice( 0, colWidth );
+
+			if ( notCovered.length > colWidth ) {
+				str += '...)';
 			} else {
 				str += ')';
 			}
 
-			items.push( [key, key + ': ' + subCovered + '/' + subCount + str] );
+			items.push( [key, str] );
 		}
 
 		count += subCount;
@@ -129,7 +140,8 @@ let defaultModules: Array<string> = [
 	'./test_Shape.js',
 	'./test_Anim.js',
 	'./test_Entity.js',
-	'./test_collision.js'
+	'./test_collision.js',
+	'./test_Angle.js'
 ]
 
 /*

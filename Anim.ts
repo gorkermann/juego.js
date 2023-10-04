@@ -1,3 +1,4 @@
+import { Angle } from './Angle.js'
 import { Vec2 } from './Vec2.js'
 import { Dict } from './util.js'
 
@@ -245,14 +246,15 @@ export class PhysField extends AnimField {
 		let diff = d0 - target.value;
 
 		if ( this.isAngle && !target.isSpin ) {
-			this.obj[this.varname] = normalizeAngle( this.obj[this.varname] );
+			this.obj[this.varname] = Angle.normalize( this.obj[this.varname] );
+			
 			d0 = this.obj[this.varname];
-			target.value = normalizeAngle( target.value );
-			diff = normalizeAngle( diff );
+			target.value = Angle.normalize( target.value );
+			diff = Angle.normalize( diff );
 
 			if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
 				 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
-				diff = normalizeAngle( Math.PI * 2 - diff );	
+				diff = Angle.normalize( Math.PI * 2 - diff );	
 			}
 		}
 
@@ -287,15 +289,6 @@ export class PhysField extends AnimField {
 }
 
 let animId = 0;
-
-function normalizeAngle( angle: number ): number {
-	angle %= ( Math.PI * 2 );
-
-	if ( angle > Math.PI ) angle -= Math.PI * 2;
-	if ( angle < -Math.PI) angle += Math.PI * 2;
-
-	return angle;
-}
 
 type PushFrameOptions = {
 	tag?: string;
@@ -538,13 +531,13 @@ export class Anim {
 			let diff = value - target.value;
 
 			if ( field.isAngle && !target.isSpin ) {
-				value = normalizeAngle( value );
-				target.value = normalizeAngle( target.value );
-				diff = normalizeAngle( diff );
+				value = Angle.normalize( value );
+				target.value = Angle.normalize( target.value );
+				diff = Angle.normalize( diff );
 
 				if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
 					 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
-					diff = normalizeAngle( Math.PI * 2 - diff );	
+					diff = Angle.normalize( Math.PI * 2 - diff );	
 				}
 			}
 
