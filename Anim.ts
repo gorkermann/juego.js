@@ -688,7 +688,7 @@ export class Anim {
 		let prevLength = thread.length;
 
 		// update delays
-		let topIndex = thread.length - 1;
+		let topIndex = -1;
 		for ( let i = thread.length - 1; i >= 0; i-- ) {
 			if ( thread[i].delay > 0 ) continue;
 
@@ -699,6 +699,8 @@ export class Anim {
 		for ( let frame of thread ) {
 			if ( frame.delay > 0 ) frame.delay -= elapsed;
 		}
+
+		if ( topIndex < 0 ) return false;
 
 		// update top frame
 		let frame = thread[topIndex];

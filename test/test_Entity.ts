@@ -262,13 +262,8 @@ tests.push( new Test( 'Entity',
 					   'toJSON',
 					   '_subDestructor',
 					   'clearCollisionData',
-					   'onCollideLeft',
-					   'onCollideRight',
-					   'onCollideUp',
-					   'onCollideDown',
 					   'shade',
-					   'draw',
-					   'drawCollisionBox'] ) );
+					   'draw'] ) );
 
 tests.push( new Test( 'TopLeftEntity',
 					  test_TopLeftEntity,

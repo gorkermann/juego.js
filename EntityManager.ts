@@ -92,9 +92,21 @@ export class EntityManager {
 
 	/* Update */
 
-	update( step: number, elapsed: number ) {
+	advance( step: number ) {
 		for ( let entity of this.entities ) {
-			entity.update( step, elapsed );
+			entity.advance( step );
+		}
+	}
+
+	animate( step: number, elapsed: number ) {
+		for ( let entity of this.entities ) {
+			entity._animateRecur( step, elapsed );
+		}
+	}	
+
+	update() {
+		for ( let entity of this.entities ) {
+			entity._updateRecur();
 		}
 	}
 		

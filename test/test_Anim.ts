@@ -732,7 +732,7 @@ function test_clear( tf: TestFuncs ) {
 
 function test_frameDelay( tf: TestFuncs ) {
 	let obj = {
-		x: 0,
+		x: -2,
 	}	
 
 	let anim = new Anim( {
@@ -741,6 +741,25 @@ function test_frameDelay( tf: TestFuncs ) {
 	new AnimFrame( {
 		'x': { value: 0 },
 	} ) );
+
+	anim.pushFrame( new AnimFrame( {
+		'x': { value: -4, expireOnReach: true }
+	} ), { delay: 2 } );
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj.x, -2 ); // if all frames have delays, do nothing (not even default frame)
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj.x, -2 ); // delay goes to 0
+
+	anim.update( 1.0, 1 );
+	tf.ASSERT_EQ( obj.x, -3 ); // delayed frame doesn't start until update AFTER delay goes to 0 
+
+	anim.clear();
+
+	anim.update( 3.0, 1 );
+	tf.ASSERT_EQ( obj.x, 0 );
+
 
 	anim.pushFrame( new AnimFrame( {
 		'x': { value: 4, expireOnReach: true }
@@ -753,7 +772,7 @@ function test_frameDelay( tf: TestFuncs ) {
 	anim.update( 1.0, 1 );
 	tf.ASSERT_EQ( obj.x, 1 );
 
-	anim.update( 1.0, 0.9 );
+	anim.update( 1.0, 0.9 ); // delay goes to 0
 	tf.ASSERT_EQ( obj.x, 2 );
 
 	anim.update( 1.0, 0.1 );

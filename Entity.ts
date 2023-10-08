@@ -10,6 +10,7 @@
 
 import * as tp from './lib/toastpoint.js'
 
+import { Anim } from './Anim.js'
 import { Vec2 } from './Vec2.js'
 import { Line } from './Line.js'
 import { Material } from './Material.js'
@@ -99,6 +100,8 @@ export class Entity {
 	name: string = 'entity';
 	flavorName: string = 'ENTITY';
 
+	anim: Anim = null;
+
 	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
 		'collideRight', 'collideLeft', 'collideDown', 'collideUp'];
 
@@ -178,13 +181,37 @@ export class Entity {
 	}
 
 	advance( step: number ) {
-		if ( this.noAdvance ) return;
-
-		this.pos.add( this.vel.times( step ) );
-		this.angle += this.angleVel * step;
+		if ( !this.noAdvance ) {
+			this.pos.add( this.vel.times( step ) );
+			this.angle += this.angleVel * step;
+		}
 
 		for ( let sub of this.getSubs() ) {
 			sub.advance( step );
+		}
+	}
+
+	animate( step: number, elapsed: number ) {
+		if ( this.anim ) {
+			this.anim.update( step, elapsed );
+		}
+	}
+
+	_animateRecur( step: number, elapsed: number ) {
+		this.animate( step, elapsed );
+
+		for ( let sub of this.getSubs() ) {
+			sub._animateRecur( step, elapsed );
+		}
+	}
+
+	update() {}
+
+	_updateRecur() {
+		this.update();
+
+		for ( let sub of this.getSubs() ) {
+			sub._updateRecur();
 		}
 	}
 
@@ -325,13 +352,6 @@ export class Entity {
 	hitWith( otherEntity: Entity, contact: Contact ): void {}
 
 	watch( pos: Vec2 ): void {}
-
-	// Move, change state, spawn stuff
-	update( step: number, elapsed: number ): void {
-		this.pos.add( this.vel.times( step ) );
-
-		this.angle += this.angleVel * step;
-	}
 
 	treeCollisionGroup(): number {
 		let result = this.collisionGroup;

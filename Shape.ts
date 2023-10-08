@@ -391,7 +391,7 @@ export class Shape {
 		if ( normal.equals( zeroVector ) ) {
 			normal = this.getVel( point ).unit().flip();
 		}
-		if ( normal.equals( zeroVector ) ) {
+		if ( normal.equals( zeroVector ) ) { // neither shape is moving
 			normal = new Vec2( 1, 0 );
 		}
 
