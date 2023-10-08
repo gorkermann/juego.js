@@ -14,6 +14,30 @@ function getDisplayVarname( s: string  ): string {
 	return words.join( ' ' );
 }
 
+function getSharedRange( objs: Array<Editable>, varname: string ): Array<string> {
+	let shared: Array<string> = [];
+
+	for ( let i = 0; i < objs.length; i++ ) {
+		let range = objs[i].ranges[varname];
+
+		if ( range === undefined ) continue;
+
+		//if ( !isValidRange( range ) ) console.warn( '...' );
+
+		if ( range && range instanceof Array ) {
+			let list = range as Array<string>;
+
+			if ( i == 0 ) {
+				shared = list.slice();
+			} else {
+				shared = shared.filter( x => list.includes( x ) );
+			}
+		}
+	}
+
+	return shared;
+}
+
 // test-only export
 export class Field {
 	linkedObjs: Array<Editable>;
@@ -210,30 +234,6 @@ export class InputField extends Field {
 	}
 }
 
-function getSharedRange( objs: Array<Editable>, varname: string ): Array<string> {
-	let shared: Array<string> = [];
-
-	for ( let i = 0; i < objs.length; i++ ) {
-		let range = objs[i].ranges[varname];
-
-		if ( range === undefined ) continue;
-
-		//if ( !isValidRange( range ) ) console.warn( '...' );
-
-		if ( range && range instanceof Array ) {
-			let list = range as Array<string>;
-
-			if ( i == 0 ) {
-				shared = list.slice();
-			} else {
-				shared = shared.filter( x => list.includes( x ) );
-			}
-		}
-	}
-
-	return shared;
-}
-
 // test-only export
 export class DropField extends Field {
 	drop: Dropdown;
@@ -312,10 +312,6 @@ export class Inspector {
 			}
 		}
 
-		/*if ( updateFunc ) {
-			updateFunc();
-		}*/
-
 		if ( anyEdited ) {
 			document.dispatchEvent( new CustomEvent( 'editField' ) );
 		}
@@ -342,6 +338,8 @@ export class Inspector {
 				title.innerHTML = obj.idString();
 			} else */if ( 'name' in obj ) {
 				title.innerHTML = ( obj as any ).name;
+			} else if ( obj.constructor ) {
+				title.innerHTML = obj.constructor.name;
 			} else {
 				title.innerHTML = 'Object';
 			}
@@ -403,7 +401,7 @@ export class Inspector {
 		return panel;
 	}
 
-	static addField( panel: HTMLDivElement, objs: Array<Editable>, varname: string, edit: boolean=false ) {
+	private static addField( panel: HTMLDivElement, objs: Array<Editable>, varname: string, edit: boolean=false ) {
 		if ( objs.length < 1 ) {
 			return;
 		}

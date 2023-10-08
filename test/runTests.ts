@@ -142,7 +142,8 @@ let defaultModules: Array<string> = [
 	'./test_Entity.js',
 	'./test_collision.js',
 	'./test_Angle.js',
-	'./test_Field.js'
+	'./test_Field.js',
+	'./test_Inspector.js'
 ]
 
 /*
