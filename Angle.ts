@@ -15,6 +15,8 @@ export class Angle {
 	}
 
 	static between( angle: number, min: Angle_HalfTurn, max: Angle_HalfTurn ) {
+		if ( Math.abs( max - min ) > Math.PI * 2 - 0.01 ) return true; // sweep covers entire circle
+
 		let sweep: Angle_PosTurn = ( max - min ) % ( Math.PI * 2 ); // modulus not necessary if min/max are actually half turns or less
 		if ( sweep < 0 ) sweep += Math.PI * 2;
 
