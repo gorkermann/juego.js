@@ -35,6 +35,20 @@ shaders.push(
 		} 
 	} );
 
+let cornerShaders: Array<( mat: Material, score: number ) => void> = [];
+
+cornerShaders.push( 
+	function( mat: Material, score: number ): void {
+		mat.hue += score * 10 * mat.alpha;
+	}
+)
+
+cornerShaders.push( 
+	function( mat: Material, score: number ): void {
+		if ( score > 0 ) mat.lum = score * 0.9;
+	}
+)
+
 export function HSLAtoFillStyle( color: HSLA ): string {
 	return 'hsla(' + color.h + ',' + color.s * 100 + '%,' + color.l * 100 + '%,' + color.a * 100 + '%)';
 }
@@ -52,6 +66,7 @@ export class Material {
 	emit: number = 0.0;
 
 	shaderIndex: number = 0;
+	cornerShaderIndex: number = 0;
 
 	skewH: number = 0.0;
 	skewS: number = 0.0; // -1.0-1.0
@@ -68,6 +83,8 @@ export class Material {
 
 	copy(): Material {
 		let mat = new Material( this.hue, this.sat, this.lum, this.shaderIndex );
+		mat.cornerShaderIndex = this.cornerShaderIndex;
+
 		mat.alpha = this.alpha;
 
 		mat.skewH = this.skewH;
@@ -107,6 +124,10 @@ export class Material {
 
 	getFillStyle(): string {
 		return HSLAtoFillStyle( this.getHSLA() );
+	}
+
+	highlightCorners( score: number ) {
+		cornerShaders[this.cornerShaderIndex]( this, score );
 	}
 
 	/**
