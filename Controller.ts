@@ -1,5 +1,14 @@
+import { Vec2 } from './Vec2.js'
+
+import { Camera } from './Camera.js'
 import { CommandRef } from './CommandRef.js'
-import { GenericMode } from './Mode.js'
+import { Editable } from './Editable.js'
+import { Entity } from './Entity.js'
+import { Keyboard, KeyCode } from './keyboard.js'
+import { GenericMode } from './mode/Mode.js'
+import { Mouse } from './Mouse.js'
+import { Selector } from './Selector.js'
+import { Inspector } from './Inspector.js'
 
 export class Controller {
 	commandList: Array<CommandRef>
@@ -9,12 +18,28 @@ export class Controller {
 
 	defaultMode: string | GenericMode = '';
 
+	// drawing
+	camera: Camera = new Camera();
+	canvas: HTMLCanvasElement = null;
+
+	// cursor (single area)
+	mouse = new Mouse();
+	mouseIn: boolean = true;
+	clickIn: boolean = false;
+	downmark: Vec2 = null;
+
+	cursor = new Vec2();
+
+	sel = new Selector<Entity>( [] );
+
+	inspected: Array<Editable> = [];
+
 	constructor( commands: Array<CommandRef> ) {
 		this.commandList = commands;
 	}
 
 	runCommand( commandName: string, options?: { [key: string]: any } ) {
-		let command: CommandRef = this.getCommand( commandName );
+		let command = this.getCommand( commandName );
 
 		if ( command ) {
 			command.tryEnter( this, null, options );
@@ -101,6 +126,8 @@ export class Controller {
 			
 			// return to previous mode
 			this.mode = this.modeStack.pop();
+			this.mode.resume( this );
+
 			this.currentCommand = this.mode.command;
 
 		} else {
@@ -110,5 +137,187 @@ export class Controller {
 
 	dispatchEvent( spec: any ) {
 		// pass
+	}
+
+	initMouse( areaId='canvas' ) {
+		if ( typeof document === 'undefined' ) return;
+
+		let area = document.getElementById( areaId );
+
+		if ( !area ) {
+			throw new Error( 'Controller.initMouse: no element with id ' + areaId );
+		}
+
+		//drawarea.addEventListener( 'contextmenu', event => event.preventDefault() );
+
+		area.onmousemove = ( e ) => {
+			this.mouse.moveHandler( e );
+
+			this.updateCursor();
+		}
+
+		area.onmousedown = ( e ) => {
+			e.stopPropagation();
+
+			this.clickIn = true;
+			this.mouse.downHandler( e );
+
+			if ( e.button == 2 ) {
+				this.mode.mouseright( this );
+			} else {
+				this.mode.mousedown( this );
+			}
+		}
+
+		area.onmouseup = ( e ) => {
+			this.mouse.upHandler( e );
+
+			// only do action if mousedown event was also in area
+			if ( this.clickIn ) {
+				if ( e.button == 2 ) {
+					this.mode.mouserightup( this );
+				} else {
+					this.mode.mouseup( this );
+				}
+			}
+			this.clickIn = false;
+		}
+
+		area.onmouseenter = ( e ) => {
+			this.mouseIn = true;
+		}
+		
+		area.onmouseleave = ( e ) => {
+			this.mouseIn = false;
+
+			this.sel.clearHovered();
+			this.sel.updateHovered();
+		}
+
+		//stopMouse( document.getElementById( 'inspector' ) );
+
+		area.onwheel = ( e ) => {
+			e.preventDefault();
+
+			//this.camera.wheelHandler( e, this.mouse.pos );
+		}
+	}
+
+	initKeyboard() {
+		if ( typeof document === 'undefined' ) return;
+
+		document.onkeydown = ( e: KeyboardEvent ) => {
+			Keyboard.downHandler( e );
+
+			if ( Keyboard.keyHit( KeyCode.BSLASH ) ) {
+				//request_update( 'breakpoint' );
+			}
+
+			if ( this.mouseIn && !( document.activeElement instanceof HTMLInputElement ) ) {
+
+				// Select input mode
+				let foundCommand = false;
+
+				for ( let command of this.commandList ) {
+					if ( command.tryEnter( this, e ) ) {
+						if ( foundCommand ) {
+							throw new Error( 'Multiple commands triggered by keyboard event' );
+						}
+
+						foundCommand = true;
+					}
+				}
+
+				if ( !foundCommand ) {
+					this.mode.keyboard( this );
+				}
+
+				//request_update( 'redraw' );
+			}			
+		} 
+
+		document.onkeyup = ( e ) => {
+			Keyboard.upHandler( e );
+
+			this.mode.keyboard( this );
+
+			//request_update( 'redraw' );
+		}		
+	}
+
+	updateCursor( p?: Vec2 ) {
+		let oldPos = this.cursor.copy();
+
+		if ( p ) {
+			this.cursor.set( p );
+		} else {
+			this.cursor.set( this.camera.screenToWorld( this.mouse.pos ) );
+		}
+
+		if ( !oldPos.equals( this.cursor ) ) {
+			this.mode.mousemove( this );
+		}
+	}
+
+	inspect( prims: Array<Editable> | HTMLElement ) {
+		let panel = null;
+
+		// generate a query string from the input
+		let query = null;
+
+		if ( prims instanceof Array ) {
+			if ( prims.length == 1 ) {
+				let obj = prims[0];
+
+				/*if ( obj instanceof Primitive ) {
+					query = obj.idString();
+				} else if ( 'name' in obj ) {
+					query = ( obj as any ).name;
+				} else {*/
+					query = 'Object';
+				//}
+				
+			} else {
+				query = prims.length + ' Objects';
+			}
+		}
+
+		// remove unpinned children
+		let foundQuery = false;
+
+		let inspector = document.getElementById( 'inspector' );
+		let children = inspector.children; // not sure if this has to be separated from the for loop
+		for ( let child of children ) {
+			/*if ( child.classList.contains( 'pinned' ) ) {
+				if ( query && query == child.getAttribute( 'query' ) ) {
+					foundQuery = true;
+				}
+			} else {*/
+				inspector.removeChild( child );
+			//}
+		}
+
+		// add a new panel, if necessary
+		if ( !foundQuery ) {
+			if ( prims instanceof Array ) {
+				panel = Inspector.getPanel( prims );
+				this.inspected = prims;
+
+			} else {
+				panel = prims;
+				this.inspected = null;
+			}
+
+			if ( panel ) {
+				panel.setAttribute( 'query', query );
+				inspector.appendChild( panel );
+			}
+		}
+
+		if ( inspector.children.length > 0 ) {
+			inspector.style.display = 'block';
+		} else {
+			inspector.style.display = 'none';	
+		}	
 	}
 }

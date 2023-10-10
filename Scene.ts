@@ -14,7 +14,7 @@ import { Vec2 } from './Vec2.js'
 export class Scene {
 	name: string = '';
 	isLoaded: boolean = false;
-	camera: Camera = null;
+	camera: Camera = new Camera();
 
 	constructor( name: string ) {
 		this.name = name;
@@ -39,12 +39,6 @@ export class Scene {
 	reset() {}
 
 	update() {}
-
-	updateCursor( pos: Vec2 ) {}
-
-	useCamera( camera: Camera ) {
-		this.camera = camera;
-	}
 
 	draw( context: CanvasRenderingContext2D ) {}
 }

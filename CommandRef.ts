@@ -1,7 +1,7 @@
 import { Keyboard, KeyCode, Key } from './keyboard.js'
 
 import { Controller } from './Controller.js'
-import { GenericMode } from './Mode.js'
+import { GenericMode } from './mode/Mode.js'
 
 type Dict<Type> = { [key: string]: Type };
 

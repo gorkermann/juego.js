@@ -1,4 +1,4 @@
-import { Controller } from './Controller.js'
+import { Controller } from '../Controller.js'
 
 export class GenericMode {
 	complete: boolean = false;
@@ -19,6 +19,8 @@ export class GenericMode {
 
 	begin( c: Controller ) {}
 
+	resume( c: Controller ) {}
+
 	mousemove( c: Controller ) {}
 
 	mouseright( c: Controller ) {}
@@ -31,7 +33,7 @@ export class GenericMode {
 
 	keyboard( c: Controller ) {}
 
-	pulse( c: Controller ) {}
+	update( c: Controller ) {}
 
 	/* ok() and cancel() should NEVER do the following:
 		set Mode.complete (doesn't affect the result)
@@ -41,5 +43,5 @@ export class GenericMode {
 
 	ok( c: Controller ) {}
 
-	draw( context: CanvasRenderingContext2D ) {}
+	draw( c: Controller, context: CanvasRenderingContext2D ) {}
 }
