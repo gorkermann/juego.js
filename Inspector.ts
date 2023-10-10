@@ -1,8 +1,20 @@
 import { Debug } from './Debug.js'
 import { Dropdown } from './Dropdown.js'
 import { Editable } from './Editable.js'
+import { Vec2 } from './Vec2.js'
 
 import { create } from './domutil.js'
+import { unorderedArraysMatch } from './util.js'
+
+function fancyType( obj: any ): string {
+	let type = typeof obj;
+
+	if ( type == 'object' && obj !== null ) {
+		return obj.constructor.name;
+	} else {
+		return type;
+	}
+}
 
 function getDisplayVarname( s: string  ): string {
 	let words = s.split(/([A-Z][a-z]+|_)/).filter( ( e: string ) => e && e != '_' );
@@ -61,9 +73,9 @@ export class Field {
 				throw new Error( 'Field.constructor: no field ' + varname + ' in object ' + i );
 			}
 
-			if ( typeof ( objs[i] as any )[varname] != type ) {
+			if ( fancyType( ( objs[i] as any )[varname] ) != type ) {
 				throw new Error( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + i + 
-								 '(' + typeof ( objs[i] as any )[varname] + '!=' + type );
+								 '(' + fancyType( ( objs[i] as any )[varname] ) + '!=' + type );
 			}	
 		}
 
@@ -184,6 +196,41 @@ export class Field {
 	}
 }
 
+function createObjectLink( obj: Array<Editable> ): HTMLDivElement {
+	let link = create( 'div' ) as HTMLDivElement;
+	link.innerHTML = fancyType( obj );
+	link.classList.add( 'object-link' );
+
+	link.onmouseup = () => {
+		document.dispatchEvent( new CustomEvent( 'dom-select', { detail: obj } ) );
+	}
+
+	link.onmouseenter = () => {
+		document.dispatchEvent( new CustomEvent( 'dom-hover', { detail: obj } ) );
+	}
+
+	link.onmousemove = ( e: any ) => {
+		e.stopPropagation();
+	}
+
+	// link.onmouseleave = () => {
+	// 	document.dispatchEvent( new CustomEvent( 'dom-hover-unset', { detail: obj } ) );
+	// }
+
+	return link;
+}
+
+export class ObjectField extends Field {
+	constructor( objs: Array<Editable>, 
+			 	 varname: string, 
+			 	 type: string,
+			 	 input: HTMLDivElement ) {
+		super( objs, varname, type );
+
+		this.input = input;
+	}
+}
+
 // test-only export
 export class InputField extends Field {
 
@@ -222,6 +269,8 @@ export class InputField extends Field {
 			return this.input.value;
 		} else if ( this.type == 'boolean' ) {
 			return this.input.checked;
+		} else {
+			console.warn( 'InputField.getDisplayValue ' + this.varname + ': unhandled var type' );
 		}
 	}
 
@@ -230,7 +279,88 @@ export class InputField extends Field {
 			this.input.value = value;
 		} else if ( this.type == 'boolean' ) {
 			this.input.checked = value;
-		}	
+		} else {
+			console.warn( 'InputField.getDisplayValue ' + this.varname + ': unhandled var type' );
+		}
+	}
+}
+
+// test-only export
+export class Vec2Field extends Field {
+
+	/* property overrides */
+
+	input: HTMLInputElement;
+
+	constructor( objs: Array<Editable>, 
+			 	 varname: string, 
+			 	 type: string, 
+			 	 input: HTMLInputElement ) {
+		super( objs, varname, type );
+		
+		this.input = input;
+
+		this.updateControl();
+
+		this.input.onfocus = () => {
+			if ( this.multiple ) this.input.value = '';
+			if ( this.overridden ) {
+				this.input.classList.remove( 'overridden' );
+			}
+		}
+
+		this.input.onblur = () => {
+			this.updateControl();
+		}
+
+		this.input.onchange = () => {
+			let words = this.getDisplayValue()
+							.replace( '(', '' )
+							.replace( ')', '' )
+							.split( ',' )
+							.map( x => parseFloat( x ) )
+							.filter( x => !isNaN( x ) );
+
+			if ( words.length != 2 ) {
+				console.warn( 'Vec2Field ' + this.varname + ': rejected input ' + words );
+
+				return;
+			}
+
+			this.takeInput( new Vec2( words[0], words[1] ) );
+		}
+	}
+
+	protected getObjectValues(): any {
+		let val = ( this.linkedObjs[0] as any )[this.varname];
+
+		// show multiple values, if conflicting
+		this.multiple = false;
+		let multiVals = [val];
+
+		for ( let obj of this.linkedObjs ) {
+			for ( let multi of multiVals ) {
+				if ( !( obj as any )[this.varname].equals( multi ) ) {
+					this.multiple = true;
+
+					multiVals.push( ( obj as any )[this.varname] );
+				}
+			}
+		}
+
+		if ( this.multiple ) {
+			val = '[' + multiVals.join( ',' ) + ']';
+		}
+
+		return val;
+	}
+
+	protected getDisplayValue(): string {
+		return this.input.value;
+	}
+
+	protected setDisplayValue( value: any ) {
+		this.input.value = value;
 	}
 }
 
@@ -289,6 +419,48 @@ export class DropField extends Field {
 	}
 }
 
+export class ArrayField extends Field {
+	entries: Array<Editable> = [];
+
+	/* property overrides */
+
+	input: HTMLDivElement;
+
+	constructor( objs: Array<Editable>, 
+			 	 varname: string, 
+			 	 type: string,
+			 	 div: HTMLDivElement ) {
+		super( objs, varname, type );
+
+		this.input = div;
+
+		if ( !( ( this.linkedObjs[0] as any )[this.varname] instanceof Array ) ) {
+			throw new Error( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + 0 + 
+							 '(' + fancyType( ( this.linkedObjs[0] as any )[varname] ) + '!=' + type );
+		}
+
+		this.updateControl();
+	}
+
+	updateControl(): boolean {
+		let list = ( this.linkedObjs[0] as any )[this.varname];
+		let updateDom = !unorderedArraysMatch( this.entries, list );
+
+		if ( updateDom ) {
+			while ( this.input.firstChild ) {
+				this.input.removeChild( this.input.firstChild );
+			}
+
+			for ( let entry of list ) {
+				let link = createObjectLink( entry );
+				this.input.appendChild( link );
+			}
+		}
+
+		return false;
+	}
+}
+
 let fields: Array<Field> = [];
 let panel: HTMLDivElement = null;
 
@@ -328,6 +500,10 @@ export class Inspector {
 		panel = create( 'div' ) as HTMLDivElement;
 		panel.className = 'query-panel';
 
+		panel.onmousemove = () => {
+			document.dispatchEvent( new CustomEvent( 'dom-hover', { detail: null } ) );
+		}
+
 		let title = create( 'div', {}, panel ) as HTMLDivElement;
 		title.className = 'query-panel-title';
 
@@ -336,9 +512,9 @@ export class Inspector {
 
 			/*if ( obj instanceof Primitive ) {
 				title.innerHTML = obj.idString();
-			} else */if ( 'name' in obj ) {
+			} else if ( 'name' in obj ) {
 				title.innerHTML = ( obj as any ).name;
-			} else if ( obj.constructor ) {
+			} else */if ( obj.constructor ) {
 				title.innerHTML = obj.constructor.name;
 			} else {
 				title.innerHTML = 'Object';
@@ -411,7 +587,7 @@ export class Inspector {
 		let span = create( 'span', { innerHTML: getDisplayVarname( varname ) + ': ' }, div ) as HTMLSpanElement;
 
 		// create input field
-		let type = typeof( (objs[0] as any)[varname] );
+		let type: string = fancyType( ( objs[0] as any )[varname] );
 		let range = objs[0].ranges[varname];
 
 		if ( range && range instanceof Array ) {
@@ -428,7 +604,7 @@ export class Inspector {
 				panel.appendChild( div );
 			}
 
-		} else {
+		} else if ( type == 'number' || type == 'string' || type == 'boolean' ) {
 			let input = create( 'input', { disabled: !edit } ) as HTMLInputElement;
 
 			// style input element
@@ -438,9 +614,6 @@ export class Inspector {
 			} else if ( type == 'boolean' ) {
 				input.className = 'check';
 				input.type = 'checkbox';
-
-			} else {
-				input.disabled = true;
 			}
 
 			// insert into DOM
@@ -452,6 +625,36 @@ export class Inspector {
 				div.appendChild( input );
 				panel.appendChild( div );
 			}
+
+		} else if ( type == 'Vec2' ) {
+			let input = create( 'input', { disabled: !edit } ) as HTMLInputElement;
+
+			input.className = 'panel-input';
+
+			// insert into DOM
+			if ( !input.disabled || 
+				 ( input.disabled && Debug.SHOW_DISABLED_FIELDS ) ) {
+				
+				fields.push( new Vec2Field( objs, varname, type, input ) );
+			
+				div.appendChild( input );
+				panel.appendChild( div );
+			}
+
+		} else if ( type == 'Array' ) {
+			let linkDiv = create( 'div' ) as HTMLDivElement;
+
+			fields.push( new ArrayField( objs, varname, type, linkDiv ) );
+
+			div.appendChild( linkDiv );
+			panel.appendChild( div );
+
+		} else {
+			let link = createObjectLink( ( objs[0] as any )[varname]);
+			fields.push( new ObjectField( objs, varname, type, link ) );
+
+			div.appendChild( link );
+			panel.appendChild( div );
 		}
 	}
 }

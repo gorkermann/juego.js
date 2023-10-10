@@ -21,10 +21,6 @@ export function rangeEdit( this: Editable, varname: string, value: any ) {
 	let oldVal = ( this as any )[varname];
 	let range = this.ranges[varname];
 
-	if ( typeof oldVal != typeof value ) {
-		throw new Error( 'rangeEdit: type mismatch for field ' + varname + ' (' + typeof oldVal + '!=' + typeof value + ')' );
-	}
-
 	// number
 	if ( typeof oldVal == 'number' ) {
 		let raw = value;

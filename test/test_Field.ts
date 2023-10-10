@@ -3,11 +3,10 @@ import { TestFuncs, Test } from '../lib/TestRun.js'
 import { Dropdown } from '../Dropdown.js'
 import { Range, Editable, rangeEdit, edit } from '../Editable.js'
 import { Field, InputField, DropField } from '../Inspector.js'
+import { MockInputElement, MockSelectElement } from '../Mock.js'
 import { Vec2 } from '../Vec2.js'
 
 import { Dict } from '../util.js'
-
-import { MockInputElement, MockSelectElement } from './Mock.js'
 
 let tests: Array<Test> = [];
 

@@ -1,4 +1,4 @@
-import { Dict } from '../util.js'
+import { Dict } from './util.js'
 
 class MockClassList {
 	constructor() {}
