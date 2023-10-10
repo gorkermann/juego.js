@@ -37,3 +37,15 @@ export function discreteAccelDist( v1: number, a: number, v2: number ) {
 	let n = Math.abs( ( v1 - v2 ) / a );
 	return n*v1 - n*(n + 1)*a / 2;
 }
+
+export function unorderedArraysMatch( list1: Array<any>, list2: Array<any> ) {
+	for ( let entry of list1 ) {
+		if ( !list2.includes( entry ) ) return false;
+	}
+
+	for ( let entry of list2 ) {
+		if ( !list1.includes( entry ) ) return false;
+	}
+
+	return true;
+}

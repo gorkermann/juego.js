@@ -1,5 +1,4 @@
-import path from 'path'
-import { MockOptionElement } from './test/Mock.js'
+import { MockOptionElement } from './Mock.js'
 
 type Dict<Type> = { [key: string]: Type };
 type HTMLAttrVal = string | boolean;
@@ -79,36 +78,6 @@ export function findGetParam( paramName: string ): string {
 		  if (tmp[0] === paramName) result = decodeURIComponent(tmp[1]);
 		});
 		
-	return result;
-}
-
-type WkLocation = {
-	workspace: string;
-	dirname: string;
-	basename: string;
-}
-
-export function getTreeLocation(): WkLocation {
-	let name = 'tool';
-	//let index = location.href.search( name );
-	let result: WkLocation = { workspace: null, dirname: null, basename: null };
-
-	result.workspace = findGetParam( 'ws' );
-	result.dirname = findGetParam( 'dirname' ) || '/';
-	result.basename = findGetParam( 'basename' ) || '';
-
-	/*
-	if ( index >= 0 ) {
-		let str = location.href.slice( index + name.length );
-		if ( str == '' || str[0] != '/' ) str = '/' + str;
-
-		result.workspace = str.split( '/' )[1]; // [0] is empty, [1] is workspace name
-		
-		let subpath = '/' + str.split( '/' ).slice(2).join( '/' ); // [2] and on is file path
-		result.dirname = path.posix.dirname( subpath );
-		result.basename = path.posix.basename( subpath );
-	}*/
-
 	return result;
 }
 
