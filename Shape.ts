@@ -750,6 +750,21 @@ export class Shape {
 		context.stroke();
 	}
 
+	basicStroke( context: CanvasRenderingContext2D ): void {
+		context.beginPath();
+
+		for ( let i = 0; i < this.points.length; i++ ) {
+			if ( i == 0 ) {
+				context.moveTo( this.points[i].x, this.points[i].y );
+			} else {
+				context.lineTo( this.points[i].x, this.points[i].y );
+			}
+		}
+
+		context.closePath();
+		context.stroke();
+	}
+
 	stroke( context: CanvasRenderingContext2D ): void {
 		context.lineWidth = 1;
 

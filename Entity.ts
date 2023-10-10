@@ -11,15 +11,15 @@
 import * as tp from './lib/toastpoint.js'
 
 import { Anim } from './Anim.js'
+import { rangeEdit, Range } from './Editable.js'
 import { Vec2 } from './Vec2.js'
 import { Line } from './Line.js'
 import { Material } from './Material.js'
-
 import { Contact } from './Contact.js'
 import { Region } from './Region.js'
 import { Debug } from './Debug.js'
-
 import { Shape } from './Shape.js'
+import { Dict } from './util.js'
 
 export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null ): Array<any> {
 	let result: Array<any> = [];
@@ -88,22 +88,34 @@ export class Entity {
 
 	fieldOfView: Region = null;		// Sight region
 	
-	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game. 
-									// Bullets are a common example	
+	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game 
+								 // Bullets are a common example
 
-	// Mouse control flags
-	mouseHover: boolean = false;
-	mouseSelected: boolean = false;	
+	/* fields from Selectable */
+
+	hovered: boolean = false;
+	preselected: boolean = false;
+	selected: boolean = false;
+
+	/* fields from Editable */
+
+	edit: ( varname: string, value: any ) => void = rangeEdit;
+	editFields: Array<string> = ['parent', 'pos', 'angle', '_subs'];
+	ranges: Dict<Range> = {};
+
+	savedVals: Dict<any> = {};
 
 	drawWireframe: boolean = false;
 
 	name: string = 'entity';
 	flavorName: string = 'ENTITY';
+	className: string = 'Entity';
 
 	anim: Anim = null;
 
 	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
-		'collideRight', 'collideLeft', 'collideDown', 'collideUp'];
+		'collideRight', 'collideLeft', 'collideDown', 'collideUp',
+		'edit'];
 
 	/*saveFields: Array<string> = ['pos', 'vel',
 		'angle', 'angleVel', 'width', 'height', 'collisionGroup', 'collisionMask', 
@@ -128,7 +140,7 @@ export class Entity {
 		let exclude = ['editFields', 'saveFields', 'discardFields'];
 
 		exclude = exclude.concat( this.discardFields );
-		fields = fields.filter( x => !exclude.includes( x ) );
+		fields = fields.filter( x => !exclude.includes( x ) );		
 
 		let flat: any = {};
 
@@ -420,6 +432,56 @@ export class Entity {
 		return contacts;
 	}
 
+	/* editor */
+
+	hover( p: Vec2 ): Array<Entity> { 
+		let output = [];
+
+		for ( let shape of this.getShapes() ) {
+			if ( shape.contains( p, 0.0, false ) ) {
+				output.push( shape.parent );
+			}
+		}
+
+		return output;
+	}
+
+	select() {}
+
+	unselect() {
+		this.selected = false;
+
+		for ( let sub of this.getSubs() ) {
+			sub.unselect();
+		}
+	}
+
+	startDrag() {
+		this.savedVals['pos'] = this.pos.copy();
+	}
+
+	drag( offset: Vec2 ) {
+		let localOffset = offset.copy();
+
+		if ( this.parent ) {
+			this.parent.unapplyTransform( localOffset, 0.0, { angleOnly: true } );
+		}
+
+		this.pos.set( this.savedVals['pos'].plus( localOffset ) );
+	}
+
+	endDrag( accept: boolean ) {
+		if ( accept ) {
+			// this.p is already set in drag()
+		} else {
+			this.pos.set( this.savedVals['pos'] );
+		}
+
+		delete this.savedVals['pos'];
+	}
+
+	/* drawing */ 
+
 	shade() {
 		for ( let sub of this.getSubs() ) {
 			sub.shade();
@@ -433,19 +495,34 @@ export class Entity {
 		context - an HTML5 2D drawing context
 	*/
 	draw( context: CanvasRenderingContext2D ) {
-		context.fillStyle = this.material.getFillStyle();
-		context.strokeStyle = 'black';
-		context.lineWidth = 1;
-
 		let shapes = this.getShapes( 0.0 );
 
 		for ( let shape of shapes ) {
+			context.lineWidth = 1;
+
 			if ( this.drawWireframe ) {
 				shape.stroke( context );
 			} else {
 				shape.fill( context );
 			}
 		}
+
+		context.strokeStyle = 'white';
+		
+		for ( let shape of shapes ) {
+			if ( shape.parent.selected ) {
+				context.lineWidth = 4;
+				context.globalAlpha = 0.3;
+				shape.basicStroke( context );
+
+			} else if ( shape.parent.hovered ) {
+				context.lineWidth = 2;
+				context.globalAlpha = 0.3;
+				shape.basicStroke( context );	
+			}
+		}
+		
+		context.globalAlpha = 1.0;
 	}
 }
 
