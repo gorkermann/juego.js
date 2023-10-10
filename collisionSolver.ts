@@ -20,13 +20,8 @@ function pushUnique<Type>( newObj: Type, list: Array<Type>, compare: ( a: Type, 
 	list.push( newObj );
 }
 
-function solverDirCompare( dir1: SolverDir, dir2: SolverDir ) {
-	return dir1.dir.equals( dir2.dir );
-}
-
-export type SolverDir = {
-	dir: Vec2,
-	contact: Contact
+function solverDirCompare( dir1: Contact, dir2: Contact ) {
+	return dir1.normal.equals( dir2.normal );
 }
 
 export type SolverResult = {
@@ -40,8 +35,8 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let lastTotal = 0.0;
 	let contacted: Entity = null;
 	let shapes = [];
-	let blockedDirs: Array<SolverDir> = [];
-	let pushDirs: Array<SolverDir> = [];
+	let blockedDirs: Array<Contact> = [];
+	let pushDirs: Array<Contact> = [];
 
 	let minPartialStep = 0.05;
 
@@ -104,7 +99,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			let ndot = entity.vel.dot( contact.normal );
 			
 			if ( ndot <= 0 ) {
-				pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
+				pushUnique( contact, blockedDirs, solverDirCompare );
 
 				let advance = stepTotal;// - lastTotal;
 				if ( advance < minPartialStep ) advance = 0; // at wall, running into wall, don't move at all
@@ -132,7 +127,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				entity.vel.add( push.times( step - stepTotal ) );
 
 				// potential crush directions
-				pushUnique( { dir: dir, contact: contact }, pushDirs, solverDirCompare );
+				pushUnique( contact, pushDirs, solverDirCompare );
 			}
 		}
 
@@ -146,16 +141,17 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 
 	let crushed = false;
 	let crusher = null;
-	for ( let dir of pushDirs ) {
-		for ( let otherDir of blockedDirs ) {
-			if ( otherDir == dir ) continue;
+	for ( let pushDir of pushDirs ) {
+		for ( let blockedDir of blockedDirs ) {
+			if ( blockedDir == pushDir ) continue;
+			if ( blockedDir.otherSub == pushDir.otherSub ) continue;
 
-			if ( otherDir.dir.dot( dir.dir ) < -0.95 ) {
+			if ( blockedDir.normal.dot( pushDir.normal ) < -0.95 ) {
 				crushed = true;
-				crusher = dir.contact.otherSub;
+				crusher = pushDir.otherSub;
 			}
 		}
 	}
 
-	return { blockedDirs: blockedDirs.map( x => x.dir ), crushed: crushed, crusher: crusher };
+	return { blockedDirs: blockedDirs.map( x => x.normal ), crushed: crushed, crusher: crusher };
 }
