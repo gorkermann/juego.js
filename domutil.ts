@@ -33,11 +33,13 @@ export function create( tag: string,
 	return elem;
 }
 
+
 export function clear( elem: HTMLElement ) {
 	while ( elem.firstChild ) {
 		elem.removeChild( elem.firstChild );
 	}
 }
+
 
 export function appendButton( parent: HTMLElement, innerHTML: string, onclick: ( e: Event ) => void ): HTMLButtonElement {
 	let button = document.createElement( 'button' );
@@ -47,6 +49,7 @@ export function appendButton( parent: HTMLElement, innerHTML: string, onclick: (
 
 	return button;			
 }
+
 
 export function formatGetParams( params: { [key: string]: string } ): string {
 	let strs = [];
@@ -58,6 +61,7 @@ export function formatGetParams( params: { [key: string]: string } ): string {
     return strs.join( '&' );
 }
 
+
 export function updateLocation( str: string ) {
 	str = str.trim();
 
@@ -65,6 +69,7 @@ export function updateLocation( str: string ) {
 		history.pushState( null, '', str );	
 	}
 }
+
 
 export function findGetParam( paramName: string ): string {
 	let result: string = null;
@@ -81,9 +86,10 @@ export function findGetParam( paramName: string ): string {
 	return result;
 }
 
-export function createTooltip( text: string ): HTMLElement {
-	let div = document.createElement( 'div' );
-	div.classList.add( 'tooltip-container' );
+
+export function createTooltip( text: string, posX: number, posY: number, parent: HTMLElement ): HTMLElement {
+	let tip = document.createElement( 'div' );
+	tip.classList.add( 'tooltip-container' );
 	
 	let child = document.createElement( 'span' );
 	child.classList.add( 'tooltip' );
@@ -92,12 +98,40 @@ export function createTooltip( text: string ): HTMLElement {
 
 	let timeoutId = setTimeout( function() { 
 		child.style.display = 'inline-block';
+
+		setTimeout( () => {
+			if ( tip.getBoundingClientRect().right > document.body.getBoundingClientRect().right ) {
+				tip.style.left = '';
+				tip.style.right = '0px';
+			}			
+		}, 0 );
+
+		document.addEventListener( 'mousemove', function(): any {
+			try {
+				document.body.removeChild( tip );
+			} catch {}
+			
+		}, { once: true } );
 	}, 500 );
 
-	div.appendChild( child );
+	tip.style.left = posX + 'px';
+	tip.style.top = posY + 'px';
 
-	return div;
+	tip.appendChild( child );
+	document.body.appendChild( tip );
+
+	// need to delay this since the mouseenter that triggers this usually is accompanied by a mousemove 
+	parent.addEventListener( 'mouseleave', function(): any {
+		try {
+			document.body.removeChild( tip );
+		} catch {}
+
+		clearTimeout( timeoutId );
+	}, { once: true } );
+
+	return tip;
 }
+
 
 export function download( obj: any, filename: string ) {
 	let url = URL.createObjectURL( obj );

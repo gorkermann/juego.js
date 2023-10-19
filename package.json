@@ -12,10 +12,12 @@
   "author": "Graham Smith",
   "license": "ISC",
   "dependencies": {
+    "md5": "^2.3.0",
     "path": "^0.12.7"
   },
   "type": "module",
   "devDependencies": {
+    "@types/md5": "^2.3.3",
     "@types/node": "^20.5.9"
   }
 }

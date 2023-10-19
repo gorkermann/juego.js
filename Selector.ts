@@ -37,7 +37,7 @@ export class Selector<Type extends Selectable<Type>> {
 
 	/* Hoverlist */
 
-	// does NOT empty the hover list!
+	// does NOT empty the hover list! (so that it doesn't get reordered)
 	clearHovered() {
 		for ( let obj of this.availablePrims ) {
 			obj.hovered = false;

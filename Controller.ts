@@ -32,8 +32,6 @@ export class Controller {
 
 	sel = new Selector<Entity>( [] );
 
-	inspected: Array<Editable> = [];
-
 	constructor( commands: Array<CommandRef> ) {
 		this.commandList = commands;
 	}
@@ -203,10 +201,16 @@ export class Controller {
 		}
 	}
 
-	initKeyboard() {
+	initKeyboard( areaId='drawarea' ) {
 		if ( typeof document === 'undefined' ) return;
 
-		document.onkeydown = ( e: KeyboardEvent ) => {
+		let area = document.getElementById( areaId );
+
+		if ( !area ) {
+			throw new Error( 'Controller.initMouse: no element with id ' + areaId );
+		}
+
+		area.onkeydown = ( e: KeyboardEvent ) => {
 			Keyboard.downHandler( e );
 
 			if ( Keyboard.keyHit( KeyCode.BSLASH ) ) {
@@ -236,7 +240,7 @@ export class Controller {
 			}			
 		} 
 
-		document.onkeyup = ( e ) => {
+		area.onkeyup = ( e ) => {
 			Keyboard.upHandler( e );
 
 			this.mode.keyboard( this );
@@ -259,65 +263,7 @@ export class Controller {
 		}
 	}
 
-	inspect( prims: Array<Editable> | HTMLElement ) {
-		let panel = null;
-
-		// generate a query string from the input
-		let query = null;
-
-		if ( prims instanceof Array ) {
-			if ( prims.length == 1 ) {
-				let obj = prims[0];
-
-				/*if ( obj instanceof Primitive ) {
-					query = obj.idString();
-				} else if ( 'name' in obj ) {
-					query = ( obj as any ).name;
-				} else {*/
-					query = 'Object';
-				//}
-				
-			} else {
-				query = prims.length + ' Objects';
-			}
-		}
-
-		// remove unpinned children
-		let foundQuery = false;
-
-		let inspector = document.getElementById( 'inspector' );
-		let children = inspector.children; // not sure if this has to be separated from the for loop
-		for ( let child of children ) {
-			/*if ( child.classList.contains( 'pinned' ) ) {
-				if ( query && query == child.getAttribute( 'query' ) ) {
-					foundQuery = true;
-				}
-			} else {*/
-				inspector.removeChild( child );
-			//}
-		}
-
-		// add a new panel, if necessary
-		if ( !foundQuery ) {
-			if ( prims instanceof Array ) {
-				panel = Inspector.getPanel( prims );
-				this.inspected = prims;
-
-			} else {
-				panel = prims;
-				this.inspected = null;
-			}
-
-			if ( panel ) {
-				panel.setAttribute( 'query', query );
-				inspector.appendChild( panel );
-			}
-		}
-
-		if ( inspector.children.length > 0 ) {
-			inspector.style.display = 'block';
-		} else {
-			inspector.style.display = 'none';	
-		}	
+	inspect( prims: Array<Editable> ) {
+		let panel = Inspector.inspectByQuery( prims.map( x => x.id ).join( ',' ) );
 	}
 }

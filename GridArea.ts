@@ -3,7 +3,6 @@ import { Line } from "./Line.js"
 import { AnimatedImage } from "./image.js"
 import { Material } from './Material.js'
 import { RayHit, closestTo } from "./RayHit.js"
-import { Region } from "./Region.js"
 import { ScrollBox } from "./ScrollBox.js"
 import { Shape } from "./Shape.js"
 import { TileArray } from "./TileArray.js"

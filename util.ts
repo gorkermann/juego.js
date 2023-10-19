@@ -49,3 +49,15 @@ export function unorderedArraysMatch( list1: Array<any>, list2: Array<any> ) {
 
 	return true;
 }
+
+export function fancyType( obj: any ): string {
+	let type = typeof obj;
+
+	if ( type == 'object' && obj !== null ) {
+		return obj.constructor.name;
+	} else if ( obj === null ) {
+		return 'null';
+	} else {
+		return type;
+	}
+}

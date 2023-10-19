@@ -3,6 +3,8 @@ import { Dict } from './util.js'
 export type Range = 'int' | 'real' | Array<string> | RegExp;
 
 export type Editable = {
+	id?: number;
+
 	edit: ( varname: string, value: any ) => void; // usually rangeEdit, but can be another function
 	editFields: Array<string>; // show editable value in panel
 	showFields?: Array<string>; // show value in panel but don't edit 
@@ -15,11 +17,21 @@ export type Editable = {
 }
 
 export function rangeEdit( this: Editable, varname: string, value: any ) {
+	let range = this.ranges[varname];
+
+	extRangeEdit.apply( this, [varname, value, range] );
+}
+
+export function extRangeEdit( this: any, varname: string, value: any, range?: Range, ) {
 	if ( value === undefined ) return;
 
 	let ok = true;
-	let oldVal = ( this as any )[varname];
-	let range = this.ranges[varname];
+	let oldVal = ( this )[varname];
+
+	/*if ( typeof oldVal != typeof value ) {
+		throw new Error( 'rangeEdit: type mismatch for field ' + varname +
+					 	 ' (' + typeof oldVal + '!=' + typeof value + ')' );
+	}*/
 
 	// number
 	if ( typeof oldVal == 'number' ) {
@@ -68,7 +80,7 @@ export function rangeEdit( this: Editable, varname: string, value: any ) {
 	}
 
 	if ( ok ) {
-		edit( this, varname, () => ( this as any )[varname] = value );
+		edit( this, varname, value ); // used to pass a function that assigned the value for some reason
 	}
 }
 

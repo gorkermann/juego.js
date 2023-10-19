@@ -20,10 +20,6 @@ export class Dropdown {
 	}
 
 	addOption( name: string, value: string='' ): HTMLOptionElement {
-		if ( name == '' ) {
-			throw new Error( 'Dropdown.addOption: cannot add blank option' );
-		}
-
 		if ( value == '' ) value = name;
 
 		let foundChild: boolean = false;

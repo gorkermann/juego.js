@@ -1,483 +1,116 @@
 import { Debug } from './Debug.js'
 import { Dropdown } from './Dropdown.js'
-import { Editable } from './Editable.js'
+import { Editable, Range } from './Editable.js'
 import { Vec2 } from './Vec2.js'
 
-import { create } from './domutil.js'
-import { unorderedArraysMatch } from './util.js'
+import { create, clear } from './domutil.js'
+import { unorderedArraysMatch, fancyType } from './util.js'
 
-function fancyType( obj: any ): string {
-	let type = typeof obj;
+import { AnimPanel } from './panel/AnimPanel.js'
+import { Field, InputField, Vec2Field, DropField, ObjectField, ArrayField,
+		 getDisplayVarname } from './panel/Field.js'
 
-	if ( type == 'object' && obj !== null ) {
-		return obj.constructor.name;
-	} else {
-		return type;
-	}
+import { Dict } from './util.js'
+
+function getDefaultEditFields( obj: any ): Array<string> {
+	return Object.keys( obj ).filter( x => x[0] != '_' );
 }
 
-function getDisplayVarname( s: string  ): string {
-	let words = s.split(/([A-Z][a-z]+|_)/).filter( ( e: string ) => e && e != '_' );
+class InspectorPanel {
+	query: string;
 
-	for ( let [i, word] of words.entries() ) {
-		words[i] = word[0].toUpperCase() + word.slice(1);
-	} 
+	dom: HTMLDivElement;
+	targets: Array<Editable>
+	fields: Array<Field> = [];
 
-	return words.join( ' ' );
-}
+	private static getTitle( targets: Array<Editable> ) {
+		let output = '';
 
-function getSharedRange( objs: Array<Editable>, varname: string ): Array<string> {
-	let shared: Array<string> = [];
-
-	for ( let i = 0; i < objs.length; i++ ) {
-		let range = objs[i].ranges[varname];
-
-		if ( range === undefined ) continue;
-
-		//if ( !isValidRange( range ) ) console.warn( '...' );
-
-		if ( range && range instanceof Array ) {
-			let list = range as Array<string>;
-
-			if ( i == 0 ) {
-				shared = list.slice();
+		for ( let obj of targets ) {
+			if ( obj.constructor ) {
+				output = obj.constructor.name;
 			} else {
-				shared = shared.filter( x => list.includes( x ) );
-			}
-		}
-	}
-
-	return shared;
-}
-
-// test-only export
-export class Field {
-	linkedObjs: Array<Editable>;
-	varname: string;
-	input: HTMLElement; // shows display value
-	type: string;
-
-	firstUpdate: boolean = true;
-	oldVal: any = null;
-
-	private gotInput: boolean = false;
-	protected multiple: boolean = false;
-	protected overridden: boolean = false;
-	private edited: boolean = false;
-
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string ) {
-		for ( let i = 0; i < objs.length; i++ ) {
-			if ( !( varname in objs[i] ) ) {
-				throw new Error( 'Field.constructor: no field ' + varname + ' in object ' + i );
+				output = 'Object';
 			}
 
-			if ( fancyType( ( objs[i] as any )[varname] ) != type ) {
-				throw new Error( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + i + 
-								 '(' + fancyType( ( objs[i] as any )[varname] ) + '!=' + type );
-			}	
+			output += ' ';
 		}
 
-		this.linkedObjs = objs.slice();
-		this.varname = varname;
-		this.type = type;
+		return output;
 	}
 
-	protected getDisplayValue(): any {}
-
-	protected setDisplayValue( value: any ) {}
-
-	protected takeInput( value: any ) {
-		for ( let obj of this.linkedObjs ) {
-			obj.edit( this.varname, value );
-		}
+	/**
+	 * create a panel of Fields based for selected objects
+	 * @param {string}          key   unique identifier for the panel. If a panel exists with this key, it will be replaced
+	 * @param {Array<Editable>} list  list of objects to be queried from
+	 * @param {string}          query description of some set of objects within the list
+	 */
+	constructor( query: string, targets: Array<Editable> ) {
+		this.query = query;
+		this.targets = targets;
+		this.dom = create( 'div' ) as HTMLDivElement;
 		
-		this.gotInput = true;
+		//this.dom.setAttribute( 'query', query );
+		this.dom.className = 'query-panel';	
+		this.dom.setAttribute( 'id', query );
 
-		//request_update( 'onmove' );
-		//request_update( 'updateTables' );
-	}
+		this.dom.onmousemove = () => {
+			document.dispatchEvent( new CustomEvent( 'dom-hover', { detail: null } ) );
+		}
 
-	protected getObjectValues(): any {
-		let val = ( this.linkedObjs[0] as any )[this.varname];
+		// title
+		let title = create( 'div', {}, this.dom ) as HTMLDivElement;
+		title.className = 'query-panel-title';
+		title.innerHTML = InspectorPanel.getTitle( this.targets ) + ' ' + query;
 
-		// show multiple values, if conflicting
-		this.multiple = false;
-		let multiVals = [val];
+		// add a checkbox to pin this panel
+		let pinBox = create( 'input', { type: 'checkbox' }, title ) as HTMLInputElement;
+		pinBox.className = 'pin-box';
 
-		for ( let obj of this.linkedObjs ) {
-			if ( !multiVals.includes( ( obj as any )[this.varname] ) ) {
-				this.multiple = true;
-
-				multiVals.push( ( obj as any )[this.varname] );
+		pinBox.onchange = () => {
+			if ( pinBox.checked ) {
+				this.dom.classList.add( 'pinned' );
+			} else {
+				this.dom.classList.remove( 'pinned' );
 			}
 		}
 
-		if ( this.multiple ) {
-			val = '[' + multiVals.join( ',' ) + ']'; // TODO: make this make sense for booleans
+		// find shared object fields, add them to inspector
+		let commonFields = this.targets[0].editFields;
+		if ( !commonFields ) commonFields = getDefaultEditFields( this.targets[0] );
+
+		for ( let obj of this.targets ) {
+			let fields = obj.editFields;
+			if ( !fields ) fields = getDefaultEditFields( obj );
+
+			commonFields = commonFields.filter( x => fields.includes( x ) );
 		}
 
-		return val;
-	}
+		for ( let varname of commonFields ) {
+			this.addField( this.targets, varname, true );
+		}
 
-	private allValuesOverridden(): boolean {
-		let allOverridden = true;
-
-		for ( let obj of this.linkedObjs ) {
-			if ( !obj.overrideFields || !obj.overrideFields.includes( this.varname ) ) {
-				allOverridden = false;
-
-				break;
+		// if showing a single object, add display-only fields
+		if ( this.targets.length == 1 && this.targets[0].showFields ) {
+			for ( let varname in this.targets[0].showFields ) {
+				this.addField( this.targets, varname, false );
 			}
 		}
 
-		return allOverridden;
+		this.updateFields();
 	}
 
-	updateControl(): boolean {
-		if ( this.linkedObjs.length < 1 ) return;
-
-		/* 
-			input.onchange is not called while the user is typing
-			input.value likewise does not change
-			this function may be called, however
-	
-			the activeElement check prevents the field from being reset by (for example)
-			a mouse movement that triggers (by some circuituous means) this function
-
-			the gotInput flag allows the user to override this and press Enter to set the value
-		*/
-		if ( !this.gotInput && 
-			 typeof document !== 'undefined' && 
-			 this.input == document.activeElement ) return;
-
-		let val = this.getObjectValues();
-
-		if ( this.input ) {
-			this.input.classList.remove( 'multiple-values' );
-			this.input.classList.remove( 'overridden' );
-		}
-
-		if ( this.multiple ) {
-			if ( this.input ) this.input.classList.add( 'multiple-values' );
-
-		// if all same value AND all overridden, display value in italics
-		} else {
-			this.overridden = this.allValuesOverridden();
-
-			if ( this.overridden && this.input ) {
-				this.input.classList.add( 'overridden' );
-			}
-		}
-		
-		this.edited = false;
-		
-		if ( val != this.oldVal ) this.edited = true;
-		this.oldVal = val;
-
-		this.setDisplayValue( val );
-
-		if ( this.edited && this.gotInput ) {
-			for ( let obj of this.linkedObjs ) {
-				if ( !obj.onUserEdit ) continue;
-
-				obj.onUserEdit( this.varname );
-			}
-		}
-
-		// the first time the field is filled (i.e. when it is created) doesn't count as an edit
-		if ( this.firstUpdate ) this.edited = false;
-		this.firstUpdate = false;
-
-		this.gotInput = false;
-	
-		return this.edited;
-	}
-}
-
-function createObjectLink( obj: Array<Editable> ): HTMLDivElement {
-	let link = create( 'div' ) as HTMLDivElement;
-	link.innerHTML = fancyType( obj );
-	link.classList.add( 'object-link' );
-
-	link.onmouseup = () => {
-		document.dispatchEvent( new CustomEvent( 'dom-select', { detail: obj } ) );
-	}
-
-	link.onmouseenter = () => {
-		document.dispatchEvent( new CustomEvent( 'dom-hover', { detail: obj } ) );
-	}
-
-	link.onmousemove = ( e: any ) => {
-		e.stopPropagation();
-	}
-
-	// link.onmouseleave = () => {
-	// 	document.dispatchEvent( new CustomEvent( 'dom-hover-unset', { detail: obj } ) );
-	// }
-
-	return link;
-}
-
-export class ObjectField extends Field {
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string,
-			 	 input: HTMLDivElement ) {
-		super( objs, varname, type );
-
-		this.input = input;
-	}
-}
-
-// test-only export
-export class InputField extends Field {
-
-	/* property overrides */
-
-	input: HTMLInputElement;
-
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string, 
-			 	 input: HTMLInputElement ) {
-		super( objs, varname, type );
-		
-		this.input = input;
-
-		this.updateControl();
-
-		this.input.onfocus = () => {
-			if ( this.multiple ) this.input.value = '';
-			if ( this.overridden ) {
-				this.input.classList.remove( 'overridden' );
-			}
-		}
-
-		this.input.onblur = () => {
-			this.updateControl();
-		}
-
-		this.input.onchange = () => {
-			this.takeInput( this.getDisplayValue() );
-		}
-	}
-
-	protected getDisplayValue(): any {
-		if ( this.type == 'number' || this.type == 'string' ) {
-			return this.input.value;
-		} else if ( this.type == 'boolean' ) {
-			return this.input.checked;
-		} else {
-			console.warn( 'InputField.getDisplayValue ' + this.varname + ': unhandled var type' );
-		}
-	}
-
-	protected setDisplayValue( value: any ) {
-		if ( this.type == 'number' || this.type == 'string' ) {
-			this.input.value = value;
-		} else if ( this.type == 'boolean' ) {
-			this.input.checked = value;
-		} else {
-			console.warn( 'InputField.getDisplayValue ' + this.varname + ': unhandled var type' );
-		}
-	}
-}
-
-// test-only export
-export class Vec2Field extends Field {
-
-	/* property overrides */
-
-	input: HTMLInputElement;
-
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string, 
-			 	 input: HTMLInputElement ) {
-		super( objs, varname, type );
-		
-		this.input = input;
-
-		this.updateControl();
-
-		this.input.onfocus = () => {
-			if ( this.multiple ) this.input.value = '';
-			if ( this.overridden ) {
-				this.input.classList.remove( 'overridden' );
-			}
-		}
-
-		this.input.onblur = () => {
-			this.updateControl();
-		}
-
-		this.input.onchange = () => {
-			let words = this.getDisplayValue()
-							.replace( '(', '' )
-							.replace( ')', '' )
-							.split( ',' )
-							.map( x => parseFloat( x ) )
-							.filter( x => !isNaN( x ) );
-
-			if ( words.length != 2 ) {
-				console.warn( 'Vec2Field ' + this.varname + ': rejected input ' + words );
-
-				return;
-			}
-
-			this.takeInput( new Vec2( words[0], words[1] ) );
-		}
-	}
-
-	protected getObjectValues(): any {
-		let val = ( this.linkedObjs[0] as any )[this.varname];
-
-		// show multiple values, if conflicting
-		this.multiple = false;
-		let multiVals = [val];
-
-		for ( let obj of this.linkedObjs ) {
-			for ( let multi of multiVals ) {
-				if ( !( obj as any )[this.varname].equals( multi ) ) {
-					this.multiple = true;
-
-					multiVals.push( ( obj as any )[this.varname] );
-				}
-			}
-		}
-
-		if ( this.multiple ) {
-			val = '[' + multiVals.join( ',' ) + ']';
-		}
-
-		return val;
-	}
-
-	protected getDisplayValue(): string {
-		return this.input.value;
-	}
-
-	protected setDisplayValue( value: any ) {
-		this.input.value = value;
-	}
-}
-
-// test-only export
-export class DropField extends Field {
-	drop: Dropdown;
-
-	/* property overrides */
-	input: HTMLSelectElement;
-
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string, 
-			 	 drop: Dropdown ) {
-		super( objs, varname, type );
-
-		this.drop = drop;
-		this.input = drop.dom;
-
-		this.updateControl();
-
-		this.input.onchange = () => {
-			this.takeInput( this.getDisplayValue() );
-		}
-	}
-
-	protected getDisplayValue(): any {
-		return this.drop.getSelectedOption();
-	}
-
-	// TODO: add option to show error if value is not in range (range and item value are out of sync)
-	protected setDisplayValue( value: any ) {
-		this.drop.select( value );
-	}
-
-	updateControl(): boolean {
-		let val = this.getDisplayValue();
-
-		this.drop.clear();
-
-		let range = getSharedRange( this.linkedObjs, this.varname );
-		let disabled = getSharedRange( this.linkedObjs, this.varname + '.disabled' );
-
-		for ( let entry of range ) {
-			let option = this.drop.addOption( entry );
-			if ( disabled.includes( entry ) ) option.disabled = true;
-		}
-
-		if ( val == this.getObjectValues() ) {
-			this.drop.select( val, false );
-		} else {
-			this.drop.selectNone();
-		}
-
-		return super.updateControl();
-	}
-}
-
-export class ArrayField extends Field {
-	entries: Array<Editable> = [];
-
-	/* property overrides */
-
-	input: HTMLDivElement;
-
-	constructor( objs: Array<Editable>, 
-			 	 varname: string, 
-			 	 type: string,
-			 	 div: HTMLDivElement ) {
-		super( objs, varname, type );
-
-		this.input = div;
-
-		if ( !( ( this.linkedObjs[0] as any )[this.varname] instanceof Array ) ) {
-			throw new Error( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + 0 + 
-							 '(' + fancyType( ( this.linkedObjs[0] as any )[varname] ) + '!=' + type );
-		}
-
-		this.updateControl();
-	}
-
-	updateControl(): boolean {
-		let list = ( this.linkedObjs[0] as any )[this.varname];
-		let updateDom = !unorderedArraysMatch( this.entries, list );
-
-		if ( updateDom ) {
-			while ( this.input.firstChild ) {
-				this.input.removeChild( this.input.firstChild );
-			}
-
-			for ( let entry of list ) {
-				let link = createObjectLink( entry );
-				this.input.appendChild( link );
-			}
-		}
-
-		return false;
-	}
-}
-
-let fields: Array<Field> = [];
-let panel: HTMLDivElement = null;
-
-export class Inspector {
-	constructor() {}
-
-	static updateFields() {
+	updateFields() {
 		let anyEdited = false;
 
-		for ( let field of fields ) {
+		for ( let field of this.fields ) {
 			if ( field.updateControl() ) {
 				anyEdited = true;
 			}
 		}
 
-		if ( panel ) {
-			let subPanels = panel.getElementsByClassName( 'sub-panel' );
+		if ( this.dom ) {
+			let subPanels = this.dom.getElementsByClassName( 'sub-panel' );
 
 			for ( let elem of subPanels as HTMLCollectionOf<HTMLElement> ) {
 				elem.dispatchEvent( new Event( 'update' ) );
@@ -489,120 +122,31 @@ export class Inspector {
 		}
 	}
 
-	static getPanel( list: Array<Editable> ): HTMLDivElement {
-		if ( list.length < 1 ) {
-			return null;
-		}
-
-		fields = [];
-
-		// title
-		panel = create( 'div' ) as HTMLDivElement;
-		panel.className = 'query-panel';
-
-		panel.onmousemove = () => {
-			document.dispatchEvent( new CustomEvent( 'dom-hover', { detail: null } ) );
-		}
-
-		let title = create( 'div', {}, panel ) as HTMLDivElement;
-		title.className = 'query-panel-title';
-
-		if ( list.length == 1 ) {
-			let obj = list[0];
-
-			/*if ( obj instanceof Primitive ) {
-				title.innerHTML = obj.idString();
-			} else if ( 'name' in obj ) {
-				title.innerHTML = ( obj as any ).name;
-			} else */if ( obj.constructor ) {
-				title.innerHTML = obj.constructor.name;
-			} else {
-				title.innerHTML = 'Object';
-			}
-			
-		} else {
-			title.innerHTML = list.length + ' Objects';
-		}
-
-		let pinBox = create( 'input', { type: 'checkbox' }, title ) as HTMLInputElement;
-		pinBox.className = 'pin-box';
-
-		pinBox.onchange = () => {
-			if ( pinBox.checked ) {
-				panel.classList.add( 'pinned' );
-			} else {
-				panel.classList.remove( 'pinned' );
-			}
-		}
-
-		// find shared object fields, add them to inspector
-		let commonFields = list[0].editFields;
-
-		for ( let prim of list ) {
-			for ( let i = commonFields.length - 1; i >= 0; i-- ) {
-				if ( !prim.editFields.includes( commonFields[i] ) ) {
-					commonFields.splice( i, 1 );
-				}
-			}
-		}
-
-		for ( let fieldName of commonFields ) {
-			Inspector.addField( panel, list, fieldName, true );
-		}
-
-		// if showing a single object, add display-only fields
-		if ( list.length == 1 ) {
-			for ( let varname in list[0] ) {
-
-				// editFields are already shown
-				if ( list[0].editFields.includes( varname ) ) continue;
-
-				if ( list[0].showFields && list[0].showFields.includes( varname ) ) {
-					Inspector.addField( panel, [list[0]], varname, false );
-				}
-			}
-
-			/*let childPanels = getPanel( list[0] );
-			for ( let childPanel of childPanels ) {				
-				if ( childPanel ) {
-					panel.appendChild( create( 'hr' ) );
-					panel.appendChild( childPanel );
-				}
-			}*/
-		}
-
-		// populate fields
-		Inspector.updateFields();
-
-		return panel;
-	}
-
-	private static addField( panel: HTMLDivElement, objs: Array<Editable>, varname: string, edit: boolean=false ) {
+	private addField( objs: Array<Editable>, varname: string, edit: boolean=false ) {
 		if ( objs.length < 1 ) {
 			return;
 		}
 
-		// create label
+		if ( !edit && !Debug.SHOW_DISABLED_FIELDS ) return;
+
+		// create container and label
 		let div = create( 'div', {} ) as HTMLDivElement;
 		let span = create( 'span', { innerHTML: getDisplayVarname( varname ) + ': ' }, div ) as HTMLSpanElement;
 
 		// create input field
 		let type: string = fancyType( ( objs[0] as any )[varname] );
-		let range = objs[0].ranges[varname];
+
+		let range: Range;
+		if ( 'ranges' in objs[0] ) range = objs[0].ranges[varname];
 
 		if ( range && range instanceof Array ) {
 			let drop = new Dropdown();
 
 			drop.dom.disabled = !edit;
-
-			if ( !drop.dom.disabled || 
-				 ( drop.dom.disabled && Debug.SHOW_DISABLED_FIELDS ) ) {
 				
-				fields.push( new DropField( objs, varname, type, drop ) );
+			this.fields.push( new DropField( objs, varname, type, drop ) );
 			
-				div.appendChild( drop.dom );
-				panel.appendChild( div );
-			}
+			div.appendChild( drop.dom );
 
 		} else if ( type == 'number' || type == 'string' || type == 'boolean' ) {
 			let input = create( 'input', { disabled: !edit } ) as HTMLInputElement;
@@ -615,46 +159,148 @@ export class Inspector {
 				input.className = 'check';
 				input.type = 'checkbox';
 			}
-
-			// insert into DOM
-			if ( !input.disabled || 
-				 ( input.disabled && Debug.SHOW_DISABLED_FIELDS ) ) {
 				
-				fields.push( new InputField( objs, varname, type, input ) );
-			
-				div.appendChild( input );
-				panel.appendChild( div );
-			}
+			this.fields.push( new InputField( objs, varname, type, input ) );
+		
+			div.appendChild( input );
 
 		} else if ( type == 'Vec2' ) {
 			let input = create( 'input', { disabled: !edit } ) as HTMLInputElement;
-
 			input.className = 'panel-input';
 
-			// insert into DOM
-			if ( !input.disabled || 
-				 ( input.disabled && Debug.SHOW_DISABLED_FIELDS ) ) {
-				
-				fields.push( new Vec2Field( objs, varname, type, input ) );
-			
-				div.appendChild( input );
-				panel.appendChild( div );
-			}
+			this.fields.push( new Vec2Field( objs, varname, type, input ) );
+		
+			div.appendChild( input );
 
 		} else if ( type == 'Array' ) {
 			let linkDiv = create( 'div' ) as HTMLDivElement;
 
-			fields.push( new ArrayField( objs, varname, type, linkDiv ) );
+			this.fields.push( new ArrayField( objs, varname, type, linkDiv ) );
 
 			div.appendChild( linkDiv );
-			panel.appendChild( div );
+
+		} else if ( type == 'Anim' && objs.length == 1 ) {
+			let animDiv = create( 'div' ) as HTMLDivElement;
+
+			this.fields.push( new AnimPanel( objs[0], varname, type, animDiv ) );
+
+			div.appendChild( animDiv );
 
 		} else {
-			let link = createObjectLink( ( objs[0] as any )[varname]);
-			fields.push( new ObjectField( objs, varname, type, link ) );
+			let linkDiv = create( 'div' ) as HTMLDivElement;
 
-			div.appendChild( link );
-			panel.appendChild( div );
+			this.fields.push( new ObjectField( objs, varname, type, linkDiv ) );
+
+			div.appendChild( linkDiv );
 		}
+
+		this.dom.appendChild( div );
+	}
+}
+
+let _panels: Dict<InspectorPanel> = {};
+let _objsById: Array<Editable> = [];
+
+type ClearPanelsOptions = {
+	force?: boolean;
+}
+
+export class Inspector {
+	static updatePanels() {
+		for ( let key in _panels ) {
+			_panels[key].updateFields();
+		}
+	}
+
+	static setObjectStore( list: Array<Editable> ) {
+		_objsById = list;
+	}
+
+	private static resolveQuery( query: string ): Array<Editable> {
+		let singleObjectQueries = query.split( ',' );
+		let output = [];
+
+		for ( let singleObjectQuery of singleObjectQueries ) {
+			let varnames = singleObjectQuery.split( '.' ).map( x => x.trim() );
+
+			if ( varnames.length < 1 ) continue;
+
+			let obj: any = _objsById;
+			let queryOk = true;
+
+			for ( let i = 0; i < varnames.length; i++ ) {
+				if ( varnames[i] == '' ) {
+					console.warn( 'Inspector.resolveQuery: Empty varname in query ' + query );
+					continue;
+				}
+
+				if ( !( varnames[i] in obj ) ) {
+					console.error( 'Inspector.resolveQuery: Could not resolve query ' + singleObjectQuery +
+								   ' due to missing field ' + varnames[i] + ' in ' + obj );
+					queryOk = false;
+					break;
+				}
+
+				obj = obj[varnames[i]];
+			}
+
+			if ( queryOk ) output.push( obj );
+		}
+
+		return output;
+	}
+
+	static inspectByQuery( query: string ) {
+		let panel = Inspector.getPanel( query );
+		Inspector.clearPanels();
+		Inspector.addPanel( panel, 'inspect-' + query );
+	}
+
+	static getPanel( query: string ): InspectorPanel {
+		let targets = Inspector.resolveQuery( query );
+		let panel = new InspectorPanel( query, targets );
+
+		return panel;
+	}
+
+	static clearPanels( options: ClearPanelsOptions={} ) {
+		let inspector = document.getElementById( 'inspector' );
+
+		if ( options.force ) {
+			clear( inspector );
+			_panels = {};
+
+		} else {
+			let children = inspector.children; // not sure if this has to be separated from the for loop
+			for ( let child of children ) {
+				if ( !child.classList.contains( 'pinned' ) ) {
+					delete _panels['inspect-' + child.getAttribute( 'id' )];
+
+					inspector.removeChild( child );
+				}
+			}
+		}
+
+		if ( inspector.children.length == 0 ) {
+			inspector.style.display = 'none';	
+		}
+	}
+
+	static addPanel( panel: InspectorPanel, key: string ) {
+		let inspector = document.getElementById( 'inspector' );
+
+		if ( _panels[key] ) {
+			inspector.replaceChild( panel.dom, _panels[key].dom );
+		} else {
+			inspector.appendChild( panel.dom );
+		}
+
+		_panels[key] = panel;
+
+		inspector.style.display = 'block';
+	}
+
+	static getPanelsDict(): Dict<InspectorPanel> {
+		return _panels;
 	}
 }

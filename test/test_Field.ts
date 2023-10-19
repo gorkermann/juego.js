@@ -2,7 +2,7 @@ import { TestFuncs, Test } from '../lib/TestRun.js'
 
 import { Dropdown } from '../Dropdown.js'
 import { Range, Editable, rangeEdit, edit } from '../Editable.js'
-import { Field, InputField, DropField } from '../Inspector.js'
+import { Field, InputField, DropField } from '../panel/Field.js'
 import { MockInputElement, MockSelectElement } from '../Mock.js'
 import { Vec2 } from '../Vec2.js'
 
@@ -110,6 +110,7 @@ function test_rangeEdit( tf: TestFuncs ) {
 	obj.edit( 'a', 0 );
 	tf.ASSERT_EQ( obj.a, 0 );
 
+	// not in obj
 	tf.THROWS( () => obj.edit( 'str1', 0 ) );
 
 	// list range

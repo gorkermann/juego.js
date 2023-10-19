@@ -16,7 +16,6 @@ import { Vec2 } from './Vec2.js'
 import { Line } from './Line.js'
 import { Material } from './Material.js'
 import { Contact } from './Contact.js'
-import { Region } from './Region.js'
 import { Debug } from './Debug.js'
 import { Shape } from './Shape.js'
 import { Dict } from './util.js'
@@ -51,6 +50,8 @@ export enum TransformOrder {
 }
 
 export class Entity {
+	id: number = -1;
+
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
 
@@ -76,18 +77,10 @@ export class Entity {
 	isPliant: boolean = false;
 
 	material: Material = new Material( 0, 0, 0 );
-	
-	// Collision flags. All entities have flags for collisions to the left, right, top, and bottom
-	collideRight: boolean = false; 
-	collideLeft: boolean = false;
-	collideDown: boolean = false;
-	collideUp: boolean = false;
 
 	isPlayer: boolean = false;		// Entity is controlled by a player
 	removeThis: boolean = false;	// Removal flag. Entities with this flag set will be removed from the game
 
-	fieldOfView: Region = null;		// Sight region
-	
 	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game 
 								 // Bullets are a common example
 
@@ -100,7 +93,7 @@ export class Entity {
 	/* fields from Editable */
 
 	edit: ( varname: string, value: any ) => void = rangeEdit;
-	editFields: Array<string> = ['parent', 'pos', 'angle', '_subs'];
+	editFields: Array<string> = ['parent', 'pos', 'angle', '_subs', 'anim'];
 	ranges: Dict<Range> = {};
 
 	savedVals: Dict<any> = {};
@@ -113,9 +106,10 @@ export class Entity {
 
 	anim: Anim = null;
 
-	discardFields: Array<string> = ['mouseHover', 'mouseSelected',
-		'collideRight', 'collideLeft', 'collideDown', 'collideUp',
-		'edit'];
+	discardFields: Array<string> = [
+		'hovered', 'selected', 'preselected',
+		'edit', 'ranges', 'savedVals'
+	];
 
 	/*saveFields: Array<string> = ['pos', 'vel',
 		'angle', 'angleVel', 'width', 'height', 'collisionGroup', 'collisionMask', 
@@ -133,7 +127,7 @@ export class Entity {
 
 	init() {}
 
-	toJSON( toaster: tp.Toaster ): any {
+	toToast( toaster: tp.Toaster ): any {
 		let fields = Object.keys( this );
 
 		// never save these fields (which are lists of other fields)
@@ -160,30 +154,6 @@ export class Entity {
 	// don't call except as super._subDestructor() inside an override
 	protected _subDestructor() {}
 
-	// Resets collision flags
-	clearCollisionData(): void {
-		this.collideRight = false;
-		this.collideLeft = false;
-		this.collideDown = false;
-		this.collideUp = false;	
-	}
-
-	addSub( entity: Entity ) {
-		if ( entity.parent ) {
-			throw new Error( 'Entity.addSub: ' + this.constructor.name + ' already has parent ' + entity.parent.constructor.name );
-		}
-
-		if ( !this._subs.includes( entity ) ) {
-			this._subs.push( entity );
-		}
-
-		entity.parent = this;
-	}
-
-	getSubs(): Array<Entity> {
-		return this._subs;
-	}
-
 	cull() {
 		for ( let sub of this.getSubs() ) {
 			sub.cull();
@@ -191,6 +161,8 @@ export class Entity {
 
 		cullList( this._subs );
 	}
+
+	/* Update */
 
 	advance( step: number ) {
 		if ( !this.noAdvance ) {
@@ -227,6 +199,8 @@ export class Entity {
 		}
 	}
 
+	/* Body */
+
 	getOwnShapes(): Array<Shape> {
 		if ( this.isGhost ) return [];
 
@@ -262,12 +236,18 @@ export class Entity {
 		return shapes;
 	}
 
-	// Add an entity to the spawn queue. It will later be added to the game
-	spawnEntity( newEntity: Entity ): void {
-		newEntity.collisionGroup = this.collisionGroup;
-		newEntity.collisionMask = this.collisionMask;
+	getMinMax(): [Vec2, Vec2] {
+		let shapes = this.getShapes();
+		let corners: Array<Vec2> = [];
 
-		this.spawned.push( newEntity );
+		for ( let shape of shapes ) {
+			let [min, max] = Shape.getMinMax( shape.points );
+
+			corners.push( min );
+			corners.push( max );
+		}
+
+		return Shape.getMinMax( corners );
 	}
 
 	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
@@ -342,28 +322,38 @@ export class Entity {
 		return p;
 	}
 
-	hitWithMultiple( otherEntity: Entity, contacts: Array<Contact> ): void {
-		let rootsHit = false;
+ 	/* Tree */
 
-		if ( contacts.length > 0 ) {
-			for ( let contact of contacts ) {
-				if ( contact.sub == this && contact.otherSub == otherEntity ) {
-					if ( !rootsHit ) {
-						rootsHit = true;
-					} else {
-						continue;
-					}
-				}
-				
-				this.hitWith( contact.otherSub, contact );
-			}
+	addSub( entity: Entity ) {
+		if ( entity.parent ) {
+			throw new Error( 'Entity.addSub: ' + this.constructor.name + ' already has parent ' + entity.parent.constructor.name );
+		}
+
+		if ( !this._subs.includes( entity ) ) {
+			this._subs.push( entity );
+		}
+
+		entity.parent = this;
+	}
+
+	getSubs(): Array<Entity> {
+		return this._subs;
+	}
+
+	doForAllChildren( func: ( entity: Entity ) => void ) {
+		func( this );
+
+		for ( let sub of this.getSubs() ) {
+			sub.doForAllChildren( func );
 		}
 	}
 
-	// Some other entity has overlapped this one, do something
-	hitWith( otherEntity: Entity, contact: Contact ): void {}
+	spawnEntity( newEntity: Entity ): void {
+		newEntity.collisionGroup = this.collisionGroup;
+		newEntity.collisionMask = this.collisionMask;
 
-	watch( pos: Vec2 ): void {}
+		this.spawned.push( newEntity );
+	}
 
 	treeCollisionGroup(): number {
 		let result = this.collisionGroup;
@@ -385,7 +375,10 @@ export class Entity {
 		return result;
 	}
 
-	// Check if this entity's bounding rectangle overlaps another entity's bounding rectangle
+	/* Interaction */
+
+	watch( pos: Vec2 ): void {}
+
 	canBeHitBy ( otherEntity: Entity ): boolean {
 		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup ) > 0;
 	}
@@ -432,7 +425,27 @@ export class Entity {
 		return contacts;
 	}
 
-	/* editor */
+	hitWithMultiple( otherEntity: Entity, contacts: Array<Contact> ): void {
+		let rootsHit = false;
+
+		if ( contacts.length > 0 ) {
+			for ( let contact of contacts ) {
+				if ( contact.sub == this && contact.otherSub == otherEntity ) {
+					if ( !rootsHit ) {
+						rootsHit = true;
+					} else {
+						continue;
+					}
+				}
+				
+				this.hitWith( contact.otherSub, contact );
+			}
+		}
+	}
+
+	hitWith( otherEntity: Entity, contact: Contact ): void {}
+
+	/* Editor */
 
 	hover( p: Vec2 ): Array<Entity> { 
 		let output = [];
@@ -444,6 +457,13 @@ export class Entity {
 		}
 
 		return output;
+	}
+
+	anyParentHovered(): boolean {
+		if ( !this.parent ) return false;
+
+		if ( this.parent.hovered ) return true;
+		else return this.parent.anyParentHovered();
 	}
 
 	select() {}
@@ -480,7 +500,7 @@ export class Entity {
 		delete this.savedVals['pos'];
 	}
 
-	/* drawing */ 
+	/* Graphical */ 
 
 	shade() {
 		for ( let sub of this.getSubs() ) {
@@ -488,12 +508,14 @@ export class Entity {
 		}
 	}
 
-	/*
-		draw()
-		draw the caller
-	
-		context - an HTML5 2D drawing context
-	*/
+	basicStroke( context: CanvasRenderingContext2D ) {
+		let shapes = this.getShapes( 0.0 );
+
+		for ( let shape of shapes ) {
+			shape.basicStroke( context );
+		}
+	}
+
 	draw( context: CanvasRenderingContext2D ) {
 		let shapes = this.getShapes( 0.0 );
 
@@ -506,22 +528,28 @@ export class Entity {
 				shape.fill( context );
 			}
 		}
-
-		context.strokeStyle = 'white';
 		
 		for ( let shape of shapes ) {
 			if ( shape.parent.selected ) {
-				context.lineWidth = 4;
+				context.strokeStyle = 'fuchsia';
+				context.lineWidth = 6;
 				context.globalAlpha = 0.3;
 				shape.basicStroke( context );
 
 			} else if ( shape.parent.hovered ) {
+				context.strokeStyle = 'yellow';
+				context.lineWidth = 6;
+				context.globalAlpha = 0.3;
+				shape.basicStroke( context );
+
+			} else if ( shape.parent.anyParentHovered() ) {
+				context.strokeStyle = 'white';
 				context.lineWidth = 2;
 				context.globalAlpha = 0.3;
-				shape.basicStroke( context );	
+				shape.basicStroke( context );
 			}
 		}
-		
+
 		context.globalAlpha = 1.0;
 	}
 }

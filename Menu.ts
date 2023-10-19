@@ -1,20 +1,26 @@
+import { create } from './domutil.js'
 import { Entity } from './Entity.js'
 import { Vec2 } from './Vec2.js'
 
-export class Text extends Entity {
-	text: string = ""
+export function createCommandButton( 
+								name: string, 
+								commandName: string, 
+							  	selection?: Array<Entity>,
+							  	optionsOrFunc?: Object | ( () => Object ) ): HTMLInputElement 
+{
+	let button = create( 'button', { innerHTML: name } ) as HTMLInputElement;
 
-	constructor( pos: Vec2, text: string ) {
-		super( pos, 0, 0 );
+	button.onclick = function() {
+		let options = {};
+		if ( typeof optionsOrFunc == 'object' ) options = optionsOrFunc;
+		else if ( typeof optionsOrFunc == 'function' ) options = optionsOrFunc();
 
-		this.text = text;
+		let detail = { commandName: commandName,
+					   selection: selection,
+					   options: options };
+
+		document.dispatchEvent( new CustomEvent( 'runCommand', { detail: detail } ) );
 	}
 
-	draw( context: CanvasRenderingContext2D ) {
-		context.fillStyle = this.material.getFillStyle();
-		
-		context.save();
-			context.fillText( this.text, this.pos.x, this.pos.y );	
-		context.restore();
-	}
-} 
+	return button;
+}

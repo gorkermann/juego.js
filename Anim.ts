@@ -1,10 +1,29 @@
+import * as tp from './lib/toastpoint.js'
+
 import { Angle } from './Angle.js'
+import { Range, rangeEdit } from './Editable.js'
 import { Vec2 } from './Vec2.js'
 import { Dict } from './util.js'
 
 import { Debug } from './Debug.js'
 
 export type MilliCountdown = number;
+
+function toToast( this: any, toaster: tp.Toaster ): any {
+	let fields = Object.keys( this );
+
+	// never save these fields (which are lists of other fields)
+	let exclude = ['editFields', 'saveFields', 'discardFields'];
+
+	exclude = exclude.concat( this.discardFields );
+	fields = fields.filter( x => !exclude.includes( x ) );		
+
+	let flat: any = {};
+
+	tp.setMultiJSON( flat, fields, this, toaster );
+
+	return flat;
+}
 
 export class Chrono {
 	count: MilliCountdown;
@@ -36,28 +55,7 @@ type AnimFunc = {
 	funcName: string;
 	args?: Array<any>
 	
-	_run?: boolean;
-}
-
-type AnimTarget = {
-	value: AnimValue;
-
-	_inProgress?: boolean
-
-	// set one of these
-	expireOnCount?: MilliCountdown
-	expireOnReach?: boolean
-	reachOnCount?: MilliCountdown
-
-	readOnly?: boolean // Anim doesn't update the value, only checks for completeness
-
-	setDefault?: boolean // update the default frame on completion
-
-	overrideRate?: number; // override the rate from the AnimField
-    derivNo?: number; // 0 for value, 1 for first derivative
-
-    isSpin?: boolean; // overrides isAngle and allows an angle to go greater than [-pi, pi]
-    spinDir?: SpinDir; // force rotation direction
+	_hasBeenRun?: boolean;
 }
 
 export enum SpinDir {
@@ -66,14 +64,157 @@ export enum SpinDir {
 	CCW
 }
 
-export class AnimFrame {
-	targets: Dict<AnimTarget>;
-	funcs: Array<AnimFunc>;
-	tag: string;
-	delay: MilliCountdown;
+type AnimTargetOptions = {
+	expireOnCount?: MilliCountdown;
+	expireOnReach?: boolean;
+	reachOnCount?: MilliCountdown;
 
-	constructor( targets: Dict<AnimTarget>, funcs: Array<AnimFunc> = [] ) {
-		this.targets = targets;
+	readOnly?: boolean;
+
+	setDefault?: boolean;
+
+	overrideRate?: number;
+	derivNo?: number;
+
+	isSpin?: boolean;
+	spinDir?: SpinDir
+}
+
+type SimpleAnimTarget = { value: AnimValue } & AnimTargetOptions;
+
+enum Expiration {
+	none = 0,
+	expireOnReach,
+	expireOnCount,
+	reachOnCount,
+}
+
+export class AnimTarget {
+	value: AnimValue;
+
+	_inProgress: boolean = false;
+
+	count: MilliCountdown = 0;
+	expiration: Expiration = Expiration.expireOnReach;
+
+	readOnly: boolean = false; // Anim doesn't update the value, only checks for completeness
+
+	setDefault: boolean = false; // update the default frame on completion
+
+	overrideRate: number = -1; // override the rate from the AnimField
+	derivNo: number = 0; // 0 for value, 1 for first derivative
+
+	isSpin: boolean = false; // overrides isAngle and allows an angle to go greater than [-pi, pi]
+	spinDir: SpinDir = SpinDir.CLOSEST; // force rotation direction
+
+	/* prototype fields */
+
+	editFields: Array<string> = [
+		'value', 'count', 'expiration', 'overrideRate', 'isSpin', 'spinDir'
+	];
+	ranges: Dict<Range> = { 'overrideRate': 'real' };
+
+	constructor( value: AnimValue, options: AnimTargetOptions={} ) {
+		this.value = value;
+
+		for ( let varname in options ) {
+			this.edit( varname, ( options as any )[varname] );
+		}
+	}
+
+	updateCount( elapsed: number ) {
+		if ( this.count > 0 ) this.count -= elapsed;
+
+		if ( this.expiration == Expiration.expireOnCount || 
+			 this.expiration == Expiration.reachOnCount ) {
+
+			if ( this.count <= 0 ) this._inProgress = false;
+		}
+	}
+
+	getRate( step: number, elapsed: number, targetKey: string, field: AnimField, diff: Vec2 | number ): number {
+		if ( this.expiration == Expiration.reachOnCount ) {
+			if ( this.count + elapsed > 0 ) {	
+				if ( diff instanceof Vec2 ) {
+					return diff.length() * elapsed / ( this.count + elapsed );
+				} else {
+					return Math.abs( diff ) * elapsed / ( this.count + elapsed );
+				}
+			}
+		}
+
+		let rate = field.rate;
+		if ( this.overrideRate > 0 ) rate = this.overrideRate;
+
+		if ( rate < 0 ) {
+			throw new Error( 'Anim.getRate: negative rate for field ' + targetKey );
+		}
+
+		return rate * step;
+	}
+
+	copy(): AnimTarget {
+		let copy = new AnimTarget( this.value );
+		Object.assign( copy, this );
+
+		return copy;
+	}
+
+	edit( varname: string, value: any ) {
+		let range: Range;
+
+		if ( varname == 'expireOnCount' ) {
+			this.expiration = Expiration.expireOnCount;
+			this.count = value;
+
+		} else if ( varname == 'expireOnReach' ) {
+			this.expiration = Expiration.expireOnReach;
+
+		} else if ( varname == 'reachOnCount' ) {
+			this.expiration = Expiration.reachOnCount;
+			this.count = value;
+
+		} else {
+			rangeEdit.apply( this, [varname, value] );
+		}		
+	}
+
+	toToast( toaster: tp.Toaster ): any {
+		return toToast.apply( this, [toaster] );
+	}
+}
+
+let frameId = 0;
+let constructors = { 'AnimFrame': () => new AnimFrame(), 'Vec2': () => new Vec2() }
+
+export class AnimFrame {
+	id: number;
+
+	targets: Dict<AnimTarget> = {};
+	funcs: Array<AnimFunc>;
+	tag: string = '';
+	delay: MilliCountdown = 0;
+
+	editFields = ['tag', 'delay'];
+	ranges: Dict<Range> = {};
+
+	discardFields: Array<string> = [];
+
+	constructor( targets: Dict<AnimTarget | SimpleAnimTarget>={}, funcs: Array<AnimFunc>=[] ) {
+		this.id = frameId++;
+
+		for ( let key in targets ) {
+			if ( targets[key] instanceof AnimTarget ) {
+				this.targets[key] = targets[key] as AnimTarget;
+
+			} else {
+				let value = targets[key]['value'];
+				delete targets[key]['value'];
+
+				this.targets[key] = new AnimTarget( value, targets[key] );
+			}
+		}
+
 		this.funcs = funcs;
 	}
 
@@ -85,26 +226,21 @@ export class AnimFrame {
 		}
 
 		for ( let func of this.funcs ) {
-			if ( !func._run ) {
+			if ( !func._hasBeenRun ) {
 				return true;
 			}
 		}
 
 		return false;
 	}
-}
 
-function getRate( step: number, elapsed: number, targetKey: string, field: AnimField, target: AnimTarget ): number {
-	let rate = 0;
-
-	rate = field.rate;
-	if ( target.overrideRate !== undefined ) rate = target.overrideRate;
-
-	if ( rate < 0 ) {
-		throw new Error( 'Anim.getRate: negative rate for field ' + targetKey );
+	edit( varname: string, value: any ): void {
+		rangeEdit.apply( this, [varname, value] );
 	}
 
-	return rate * step;
+	toToast( toaster: tp.Toaster ) {
+		return toToast.apply( this, [toaster] );
+	}
 }
 
 type AnimFieldOptions = {
@@ -120,7 +256,12 @@ export class AnimField {
 	isAngle: boolean;
 
 	rate: number;
-	downrate: number
+	downrate: number;
+
+	editFields = ['isAngle', 'rate'];
+	ranges: Dict<Range> = { rate: 'real' };
+
+	discardFields: Array<string> = [];
 
 	constructor( obj: any, varname: string, rate: number=0, options: AnimFieldOptions={} ) {
 		if ( !obj ) return;
@@ -142,11 +283,27 @@ export class AnimField {
 	}
 
 	get(): AnimValue {
-		return this.obj[this.varname];
+		if ( this.obj[this.varname] instanceof Vec2 ) {
+			return this.obj[this.varname].copy();	
+		} else {
+			return this.obj[this.varname];	
+		}
 	}
 
 	set( value: AnimValue ) {
-		this.obj[this.varname] = value;
+		if ( this.obj[this.varname] instanceof Vec2 ) {
+			this.obj[this.varname].set( value );
+		} else {
+			this.obj[this.varname] = value;
+		}
+	}
+
+	edit( varname: string, value: any ): void {
+		rangeEdit.apply( this, [varname, value] );
+	}
+
+	toToast( toaster: tp.Toaster ) {
+		return toToast.apply( this, [toaster] );
 	}
 }
 
@@ -201,23 +358,23 @@ export class PhysField extends AnimField {
 			throw new Error( 'Anim.update: expected Vec2 or number target for field ' + targetKey );
 		}
 
-		let rate = getRate( step, elapsed, targetKey, this, target );
-
 		let d0 = this.obj[this.varname] as Vec2;
 		let d1 = this.obj[this.derivname] as Vec2;
 
 		let diff = target.value.minus( d0 );
 
-		if ( target.reachOnCount + elapsed > 0 ) {
-			rate = diff.length() * elapsed / ( target.reachOnCount + elapsed );
-		}		
+		let rate = target.getRate( step, elapsed, targetKey, this, diff );
+
+		/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
+			rate = diff.length() * elapsed / ( target.count + elapsed );
+		}*/		
 
 		// instantaneous acceleration
 		if ( !target.derivNo ) {
 			if ( diff.length() <= rate || !rate ) {
 				d1.set( diff ); // phys.value will hit target when deriv is added
 
-				if ( target.expireOnReach ) target._inProgress = false;
+				if ( target.expiration == Expiration.expireOnReach ) target._inProgress = false;
 
 			} else {
 				d1.set( diff.unit().times( rate ) );
@@ -239,8 +396,6 @@ export class PhysField extends AnimField {
 			throw new Error( 'Anim.update: expected Vec2 or number target for field ' + targetKey );
 		}
 
-		let rate = getRate( step, elapsed, targetKey, this, target );
-
 		let d0 = this.obj[this.varname] as number;
 
 		let diff = d0 - target.value;
@@ -258,16 +413,18 @@ export class PhysField extends AnimField {
 			}
 		}
 
-		if ( target.reachOnCount + elapsed > 0 ) {
-			rate = Math.abs( diff ) * elapsed / ( target.reachOnCount + elapsed );
-		}		
+		let rate = target.getRate( step, elapsed, targetKey, this, diff );
+
+		/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
+			rate = Math.abs( diff ) * elapsed / ( target.count + elapsed );
+		}*/		
 
 		// instantaneous acceleration
 		if ( !target.derivNo ) {
 			if ( Math.abs( diff ) <= rate || !rate ) {
 				this.obj[this.derivname] = target.value - d0; // phys.value will hit target when deriv is added
 
-				if ( target.expireOnReach ) target._inProgress = false;
+				if ( target.expiration == Expiration.expireOnReach ) target._inProgress = false;
 
 			} else if ( diff < 0 ) {
 				this.obj[this.derivname] = rate;
@@ -288,12 +445,15 @@ export class PhysField extends AnimField {
 	}
 }
 
+type FrameSequence = Array<AnimFrame>;
+
 let animId = 0;
 
 type PushFrameOptions = {
 	tag?: string;
 	delay?: MilliCountdown;
 	threadIndex?: number;
+	sequenceKey?: string;
 }
 
 type ClearOptions = {
@@ -308,6 +468,7 @@ export class Anim {
 	default: AnimFrame = new AnimFrame( {} );
 	threads: Array<Array<AnimFrame>> = [];
 	touched: Dict<boolean> = {};
+	sequences: Dict<FrameSequence> = {};
 
 	constructor( fields: Dict<AnimField>={}, frame: AnimFrame=new AnimFrame( {} ) ) {
 		this.fields = fields;
@@ -327,14 +488,14 @@ export class Anim {
 	 * default frame ignores most of the fields in AnimTarget and only takes a value 
 	 * could potentially also take: derivNo, isSpin, spinDir
 	 * 
-	 * @param {string}     key    [description]
+	 * @param {string}	 key	[description]
 	 * @param {AnimTarget} target [description]
 	 */
 	setDefault( key: string, target: AnimTarget ) {
 		if ( key in this.default.targets ) {
 			this.default.targets[key].value = target.value;	
 		} else {
-			this.default.targets[key] = { value: target.value };	
+			this.default.targets[key] = new AnimTarget( target.value );	
 		}
 	}
 
@@ -412,8 +573,7 @@ export class Anim {
 			if ( !( key in this.fieldGroups ) ) continue; 
 
 			for ( let fieldKey of this.fieldGroups[key] ) {
-				let copy = Object.assign( {}, frame.targets[key] );
-				addTargets[fieldKey] = copy;
+				addTargets[fieldKey] = frame.targets[key].copy();
 			}
 
 			removeKeys.push( key );
@@ -435,19 +595,14 @@ export class Anim {
 
 			this.initTargetObj( key, target );
 
-			if ( target.expireOnCount < 0 ) {
-				console.warn( this.name + '.initFrame: negative expireOnCount in frame ' + 
+			if ( target.count < 0 ) {
+				console.warn( this.name + '.initFrame: negative count in frame ' + 
 							  JSON.stringify( frame.targets ) );
 			}
 
-			if ( target.reachOnCount < 0 ) {
-				console.warn( this.name + '.initFrame: negative reachOnCount in frame ' + 
-							  JSON.stringify( frame.targets ) );
-			}
-
-			if ( target.expireOnReach || 
-				 target.expireOnCount > 0 ||
-				 target.reachOnCount > 0 ) {
+			if ( target.expiration == Expiration.expireOnReach ||
+				 ( target.expiration == Expiration.expireOnCount && target.count > 0 ) ||
+				 ( target.expiration == Expiration.reachOnCount && target.count > 0 ) ) {
 				target._inProgress = true;
 			}
 		}
@@ -464,7 +619,7 @@ export class Anim {
 		}
 
 		if ( !frame.inProgress() ) {
-			throw new Error( this.name + '.initFrame: no expiry set in frame ' + JSON.stringify( frame.targets ) );
+			throw new Error( this.name + '.initFrame: no expiry set in frame ' + frame.targets );
 		}
 
 		return true;
@@ -494,26 +649,119 @@ export class Anim {
 
 		let threadIndex = Math.floor( options.threadIndex );
 
-		if ( this.initFrame( frame ) && 
-			 !this.matchesOtherThread( frame, this.threads[threadIndex] ) ) {
+		try {
+			if ( this.initFrame( frame ) && 
+				 !this.matchesOtherThread( frame, this.threads[threadIndex] ) ) {
 
-			if ( options.tag ) frame.tag = options.tag; 
-			frame.delay = options.delay;
+				if ( options.tag ) frame.tag = options.tag; 
+				frame.delay = options.delay;
 
-			if ( !( threadIndex in this.threads ) ) {
-				this.threads[threadIndex] = [];
+				if ( !( threadIndex in this.threads ) ) {
+					this.threads[threadIndex] = [];
+				}
+
+				this.threads[threadIndex].push( frame );
+
+				if ( Debug.LOG_ANIM ) {
+					console.log( this.name + ': pushed frame ' + 
+								 (this.threads[threadIndex].length - 1) + 
+								 ' to thread ' + threadIndex + 
+								 ' ' + JSON.stringify( frame.targets ) );
+				}
 			}
-
-			this.threads[threadIndex].push( frame );
-
-			if ( Debug.LOG_ANIM ) {
-				console.log( this.name + ': pushed frame ' + 
-							 (this.threads[threadIndex].length - 1) + 
-							 ' to thread ' + threadIndex + 
-							 ' ' + JSON.stringify( frame.targets ) );
-			}
+		} catch ( ex: any ) {
+			console.error( ex.message );
 		}
 	}
+
+	getThread( sequenceKey: string, threadIndex: number=0 ): Array<AnimFrame> {
+		let thread: Array<AnimFrame> = [];
+
+		if ( sequenceKey ) {
+			if ( !( sequenceKey in this.sequences ) ) {
+				console.error( this.name + ' getSequence: No sequence ' + sequenceKey ); 
+			} else {
+				thread = this.sequences[sequenceKey];
+			}
+
+			// ignore threadIndex
+
+		} else {
+			if ( threadIndex >= this.threads.length ) {
+				console.error( this.name + ' getThread: Thread index out of range (' + threadIndex + '>=' + this.threads.length );
+
+			} else if ( threadIndex < 0 ) {
+				console.error( this.name + ' getThread: Negative thread index (' + threadIndex + ')' );
+
+			} else {
+				thread = this.threads[threadIndex];
+			}
+		}
+
+		return thread;
+	}
+
+	pushEmptyFrame( sequenceKey: string, threadIndex: number=0 ) {
+		let thread = this.getThread( sequenceKey, threadIndex );
+
+		thread.push( new AnimFrame( {} ) );
+	}
+
+	removeFrame( sequenceKey: string, threadIndex: number, frameIndex: number ) {
+		let thread = this.getThread( sequenceKey, threadIndex );
+
+		thread.splice( frameIndex, 1 );
+	}
+
+	addSequence( sequenceKey: string ) {
+		if ( !sequenceKey ) {
+			throw new Error( this.name + ' addSequence: Invalid sequence key ' + sequenceKey );
+		}
+
+		if ( this.sequences[sequenceKey] ) {
+			console.warn( this.name + ' addSequence: Sequence ' + sequenceKey + ' already exists' );
+		}
+
+		this.sequences[sequenceKey] = [];
+	}
+
+	playSequence( sequenceKey: string ) {
+		if ( !( sequenceKey in this.sequences ) ) {
+			throw new Error( this.name + ' enterSequence: Invalid sequence key ' + sequenceKey );
+		}
+
+		// copy sequence
+		// TODO: move this elsewhere
+		let toaster = new tp.Toaster( constructors );
+		let json = tp.toJSON( this.sequences[sequenceKey], toaster );
+		toaster.cleanAddrIndex();
+
+		toaster = new tp.Toaster( constructors );
+		let frames = tp.fromJSON( json, toaster ) as Array<AnimFrame>;
+		tp.resolveList( [frames], toaster );
+
+		frames.map( x => this.initFrame( x ) );
+
+		this.threads = [frames];
+	}
+
+	removeSequence( sequenceKey: string ) {
+		if ( !( sequenceKey in this.sequences ) ) {
+			throw new Error( this.name + ' removeSequence: Invalid sequence key ' + sequenceKey );
+		}
+
+		delete this.sequences[sequenceKey];
+	}
+
+	getFieldValue( key: string ): AnimValue {
+		if ( !( key in this.fields ) ) {
+			throw new Error( this.name + ' getFieldValue: No key ' + key ); 
+		}
+
+		return this.fields[key].get();
+	}
+
+	/* update functions for each AnimValue type */
 
 	updateNumber( step: number, elapsed: number, targetKey: string, field: AnimField, target: AnimTarget ) {
 		if ( typeof target.value != 'number' ) {
@@ -526,8 +774,6 @@ export class Anim {
 
 		if ( !target.readOnly ) {
 			let value = field.get() as number;
-			let rate = getRate( step, elapsed, targetKey, field, target );
-
 			let diff = value - target.value;
 
 			if ( field.isAngle && !target.isSpin ) {
@@ -541,9 +787,10 @@ export class Anim {
 				}
 			}
 
-			if ( target.reachOnCount + elapsed > 0 ) {
-				rate = Math.abs( diff ) * elapsed / ( target.reachOnCount + elapsed );
-			}
+			let rate = target.getRate( step, elapsed, targetKey, field, diff );
+			/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
+				rate = Math.abs( diff ) * elapsed / ( target.count + elapsed );
+			}*/
 
 			if ( Math.abs( diff ) <= rate || !rate ) {
 				value = target.value;
@@ -558,7 +805,7 @@ export class Anim {
 			field.set( value );
 		}
 
-		if ( field.get() == target.value && target.expireOnReach ) {
+		if ( field.get() == target.value && target.expiration == Expiration.expireOnReach ) {
 			target._inProgress = false;
 		}
 	}
@@ -569,24 +816,24 @@ export class Anim {
 		}
 
 		let value = field.get() as string;
-		let rate = getRate( step, elapsed, targetKey, field, target );
 
 		if ( target.value.indexOf( value ) < 0 ) {
 			value = '';
 		}
 
 		let diff = Math.abs( target.value.length - value.length );
+		let rate = target.getRate( step, elapsed, targetKey, field, diff );
 
-		if ( target.reachOnCount + elapsed > 0 ) {
-			rate = diff * elapsed / ( target.reachOnCount + elapsed );
-		}
+		/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
+			rate = diff * elapsed / ( target.count + elapsed );
+		}*/
 
 		rate = Math.floor( rate );
 
 		if ( diff <= rate || !rate ) {
 			value = target.value;
 
-			if ( target.expireOnReach ) target._inProgress = false;
+			if ( target.expiration == Expiration.expireOnReach ) target._inProgress = false;
 		
 		} else {
 			value = target.value.slice( 0, value.length + rate );
@@ -605,13 +852,14 @@ export class Anim {
 		}*/
 
 		if ( !target.readOnly ) {
-			let value = field.get() as Vec2;
-			let rate = getRate( step, elapsed, targetKey, field, target );
+			let value = field.obj[field.varname] as Vec2;
+
 			let diff = target.value.minus( value );
 
-			if ( target.reachOnCount + elapsed > 0 ) {
-				rate = diff.length() * elapsed / ( target.reachOnCount + elapsed );
-			}
+			let rate = target.getRate( step, elapsed, targetKey, field, diff );
+			/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
+				rate = diff.length() * elapsed / ( target.count + elapsed );
+			}*/
 
 			if ( diff.length() <= rate || !rate ) {
 				value.set( target.value );
@@ -621,7 +869,9 @@ export class Anim {
 			}
 		}
 
-		if ( ( field.get() as Vec2 ).equals( target.value ) && target.expireOnReach ) {
+		if ( ( field.get() as Vec2 ).equals( target.value ) && 
+			 target.expiration == Expiration.expireOnReach ) {
+
 			target._inProgress = false;
 		}
 	}
@@ -629,9 +879,9 @@ export class Anim {
 	/**
 	 * Mostly the same as updateVec2, except that obj.derivname is modified based on obj.varname
 	 * 
-	 * @param {number}     step    [description]
-	 * @param {number}     elapsed [description]
-	 * @param {string}     key     [description]
+	 * @param {number}	 step	[description]
+	 * @param {number}	 elapsed [description]
+	 * @param {string}	 key	 [description]
 	 * @param {PhysField}  field   [description]
 	 * @param {AnimTarget} target  [description]
 	 */
@@ -648,6 +898,8 @@ export class Anim {
 			}
 		}
 	}
+
+	/* Thread Management */
 
 	update( step: number, elapsed: number ) {
 		/*
@@ -673,13 +925,13 @@ export class Anim {
 		}
 
 		// cancel velocities for physical fields we are currently ignoring
-        for ( let key in this.fields ) {
-            let field = this.fields[key];
+		for ( let key in this.fields ) {
+			let field = this.fields[key];
 
-            if ( field instanceof PhysField && !( key in this.touched ) ) {
-            	field.zero();
-            }
-        }
+			if ( field instanceof PhysField && !( key in this.touched ) ) {
+				field.zero();
+			}
+		}
 	}	
 
 	private updateThread( step: number, elapsed: number, thread: Array<AnimFrame> ): boolean {
@@ -739,15 +991,7 @@ export class Anim {
 
 			this.touched[key] = true;
 
-			if ( target.expireOnCount && target.expireOnCount > 0 ) {
-				target.expireOnCount -= elapsed;
-				if ( target.expireOnCount <= 0 ) target._inProgress = false;
-			}
-
-			if ( target.reachOnCount && target.reachOnCount > 0 ) {
-				target.reachOnCount -= elapsed;
-				if ( target.reachOnCount <= 0 ) target._inProgress = false;	
-			}
+			target.updateCount( elapsed );
 
 			let value = field.get();
 
@@ -760,7 +1004,7 @@ export class Anim {
 					field.set( target.value );
 				}
 
-				if ( field.get() == target.value && target.expireOnReach ) {
+				if ( field.get() == target.value && target.expiration == Expiration.expireOnReach ) {
 					target._inProgress = false;
 				}
 
@@ -779,10 +1023,10 @@ export class Anim {
 		}
 
 		for ( let func of frame.funcs ) {
-			if ( !func._run ) {
+			if ( !func._hasBeenRun ) {
 				func.caller[func.funcName].apply( func.caller, func.args );
 
-				func._run = true;
+				func._hasBeenRun = true;
 			}
 		}
 	}

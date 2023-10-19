@@ -1,6 +1,6 @@
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
-import { Anim, AnimFrame, AnimField, PhysField } from '../Anim.js'
+import { Anim, AnimFrame, AnimField, AnimTarget, PhysField } from '../Anim.js'
 import { Vec2 } from '../Vec2.js'
 
 function test_Anim( tf: TestFuncs ) {
@@ -16,17 +16,17 @@ function test_Anim( tf: TestFuncs ) {
 		'onFire': new AnimField( obj, 'onFire' )
 	},
 	new AnimFrame( {
-		'x': { value: 1 },
+		'x': new AnimTarget( 1 ),
 		'y': { value: 1 },
-		'onFire': { value: true }
+		'onFire': new AnimTarget( true )
 	} ) );
 
-	// no var in object for field name
+	// no var in object named 'xx'
 	tf.THROWS( () => new AnimField( obj, 'xx', 1 ) );
 
-	// no field for frame key
+	// no field with key 'a'
 	tf.THROWS( () => anim.pushFrame( new AnimFrame( {
-		'a': { value: 0 }
+		'a': new AnimTarget( 0 )
 	} ) ) );
 
 	// ok
@@ -57,8 +57,8 @@ function test_Anim( tf: TestFuncs ) {
 	tf.ASSERT_EQ( anim.threads.length, 0 );
 
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: 2, expireOnReach: true },
-		'onFire': { value: false } // no expiration set
+		'x': new AnimTarget( 2 ),
+		'onFire': new AnimTarget( false )
 	} ) );
 
 	tf.ASSERT_EQ( anim.threads.length, 1 );
@@ -81,7 +81,7 @@ function test_Anim( tf: TestFuncs ) {
 
 	// push a frame for a certain duration
 	anim.pushFrame( new AnimFrame( {
-		'x': { value: 10, expireOnCount: 100 }
+		'x': new AnimTarget( 10, { expireOnCount: 100 } )
 	} ) );
 
 	anim.update( 1.0, 99 );
@@ -128,7 +128,7 @@ function test_Anim( tf: TestFuncs ) {
 	anim.fields['y'].rate = 0.7; 
 
 	anim.pushFrame( new AnimFrame( {
-		'y': { value: 0, expireOnReach: true, setDefault: true }
+		'y': new AnimTarget( 0, { setDefault: true } )
 	} ) );
 
 	anim.update( 1.0, 1 );
@@ -162,14 +162,14 @@ function test_Anim( tf: TestFuncs ) {
 		'b': new AnimField( obj2, 'b', 0.6 ),
 	},
 	new AnimFrame( {
-		'a': { value: new Vec2( 3, 3 ) },
-		'b': { value: new Vec2( 0, -1 ) },
+		'a': new AnimTarget( new Vec2( 3, 3 ) ),
+		'b': new AnimTarget( new Vec2( 0, -1 ) ),
 	} ) );
 
 	// type mismatch
 	tf.THROWS( () => {
 		anim.pushFrame( new AnimFrame( { 
-			'a': { value: 1 } 
+			'a': new AnimTarget( 1 ), 
 		} ) );
 	} );
 
@@ -417,7 +417,7 @@ function test_readOnlyTargets( tf: TestFuncs ) {
 
 	anim.pushFrame( new AnimFrame( {
 		'x': { value: 4, expireOnReach: true, readOnly: true },
-		'y': { value: 4 }
+		'y': { value: 2 }
 	} ) );
 
 	anim.update( 1.0, 1 );

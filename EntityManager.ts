@@ -48,8 +48,8 @@ function parseJSON( jsonlist: Array<object>, toaster: tp.Toaster ): Array<Entity
 }
 
 export class EntityManager {
-
 	entities: Array<Entity> = [];
+	entitiesById: Array<Entity> = [];
 
 	constructor() {
 
@@ -65,6 +65,7 @@ export class EntityManager {
 
 	clear() {
 		this.entities = [];
+		this.entitiesById = [];
 	}
 
 	/* Import/Export */
@@ -115,7 +116,20 @@ export class EntityManager {
 			entity.cull();
 		}
 
-		cullList( this.entities );
+		for ( let i = this.entities.length - 1; i >= 0; i-- ) {
+
+			if ( this.entities[i].removeThis ) {
+
+				// free up ids
+				this.entities[i].doForAllChildren( ( e: Entity ) => {
+					this.entitiesById[e.id] = null;
+					e.id = -1;
+				} );
+
+				// remove from lists
+				this.entities.splice( i, 1 );
+			}
+		}
 	}
 		
 	insertSpawned() {
@@ -147,8 +161,31 @@ export class EntityManager {
 		if ( !entity.collisionGroup && !entity.isGhost ) {
 			throw new Error( 'EntityManager.insert: Entity has no collision group set' );
 		}
-		
+
 		this.entities.push( entity );
+
+		entity.doForAllChildren( ( e: Entity ) => {
+			if ( e.id < 0 || this.entitiesById[e.id] ) {
+
+				// search for lowest unused id
+				for ( let i = 0; i < this.entitiesById.length; i++ ) {
+					if ( !this.entitiesById[i] ) {
+						this.entitiesById[i] = e;
+						e.id = i;
+
+						break;
+					}
+				}
+
+				if ( e.id < 0 ) {
+					e.id = this.entitiesById.length;
+					this.entitiesById.push( e );
+				}
+
+			} else {
+				this.entitiesById[e.id] = e;
+			}
+		} );
 	}
 
 	insertList( entities: Array<Entity> ) {

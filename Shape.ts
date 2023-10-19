@@ -6,15 +6,15 @@
 	A polygon (a single, non-self-intersecting closed loop of line segments)
  */
 
+import { Entity } from './Entity.js'
 import { Contact } from './Contact.js'
-import { Entity } from "./Entity.js"
-import { Vec2 } from "./Vec2.js"
-import { Line } from "./Line.js"
+import { Vec2 } from './Vec2.js'
+import { Line } from './Line.js'
 import { Material } from './Material.js'
-import { RayHit, closestTo } from "./RayHit.js"
+import { RayHit, closestTo } from './RayHit.js'
 import { between } from './util.js'
 
-import { Debug } from "./Debug.js"
+import { Debug } from './Debug.js'
 
 let zeroVector = new Vec2( 0, 0 );
 

@@ -1,5 +1,5 @@
 import { Camera } from './Camera.js'
-import { Entity } from './Entity.js'
+import { EntityManager } from './EntityManager.js'
 import { ScrollBox } from './ScrollBox.js'
 import { Vec2 } from './Vec2.js'
 
@@ -15,6 +15,7 @@ export class Scene {
 	name: string = '';
 	isLoaded: boolean = false;
 	camera: Camera = new Camera();
+	em: EntityManager = new EntityManager();
 
 	constructor( name: string ) {
 		this.name = name;
