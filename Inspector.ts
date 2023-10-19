@@ -196,6 +196,14 @@ class InspectorPanel {
 
 		this.dom.appendChild( div );
 	}
+
+	drawHelpers( context: CanvasRenderingContext2D ) {
+		for ( let field of this.fields ) {
+			for ( let helper of field.helperEntities ) {
+				helper.draw( context );
+			}
+		}
+	}
 }
 
 let _panels: Dict<InspectorPanel> = {};
@@ -302,5 +310,11 @@ export class Inspector {
 
 	static getPanelsDict(): Dict<InspectorPanel> {
 		return _panels;
+	}
+
+	static drawPanelHelpers( context: CanvasRenderingContext2D ) {
+		for ( let key in _panels ) {
+			_panels[key].drawHelpers( context );
+		}
 	}
 }

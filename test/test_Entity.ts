@@ -246,6 +246,30 @@ function test_EntityOverlap( tf: TestFuncs ) {
 	tf.ASSERT_EQ( contacts[0].otherSub, e1ito );
 }
 
+function test_EntityCopy( tf: TestFuncs ) {
+
+	// single entity, no relations
+	let e = new Entity( new Vec2( 1, 1 ), 10, 10 );
+
+	let copy = e.copy();
+
+	tf.ASSERT( e.pos != copy.pos );
+	tf.ASSERT_EQ( e.pos, copy.pos );
+
+	// with subs
+	e = new Entity( new Vec2( 1, 1 ), 10, 10 );
+	let e2 = new Entity( new Vec2( 2, 2 ), 20, 20 );
+
+	e.addSub( e2 );
+
+	copy = e.copy();
+
+	tf.ASSERT_EQ( copy.getSubs().length, 1 );
+	tf.ASSERT( copy.getSubs()[0] != e2 );
+	tf.ASSERT( copy.getSubs()[0].pos != e2.pos );
+	tf.ASSERT_EQ( copy.getSubs()[0].pos, e2.pos );
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Entity',
@@ -277,5 +301,11 @@ tests.push( new Test( 'Entity',
 					  test_EntityOverlap,
 					  ['canBeHitBy'],[] 
 					  ) ); 
+
+tests.push( new Test( 'Entity',
+					  test_EntityCopy,
+					  [],[] 
+					  ) ); 
+
 
 export default tests;

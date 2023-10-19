@@ -1,6 +1,7 @@
 import { Debug } from '../Debug.js'
 import { Dropdown } from '../Dropdown.js'
 import { Editable, Range, rangeEdit } from '../Editable.js'
+import { Entity } from '../Entity.js'
 import { Vec2 } from '../Vec2.js'
 
 import { create } from '../domutil.js'
@@ -107,6 +108,8 @@ export class Field {
 
 	firstUpdate: boolean = true;
 	oldVal: any = null;
+
+	helperEntities: Array<Entity> = [];
 
 	private gotInput: boolean = false;
 	protected multiple: boolean = false;

@@ -9,6 +9,7 @@
 */
 
 import * as tp from './lib/toastpoint.js'
+import { constructors, nameMap } from './constructors.js'
 
 import { Anim } from './Anim.js'
 import { rangeEdit, Range } from './Editable.js'
@@ -141,6 +142,29 @@ export class Entity {
 		tp.setMultiJSON( flat, fields, this, toaster );
 
 		return flat;
+	}
+
+	/**
+	 * Returns a deep copy the entity
+	 *
+	 * This has the potential to get very silly, if for instance an entity happens to have a pointer
+	 * to the level it's in, since it will make a deep copy of the level, and then *every other* entity in the level
+	 * 
+	 * @return {Entity} the copy
+	 */
+	copy(): Entity {
+		let toaster = new tp.Toaster( constructors );
+		let json = tp.toJSON( this, toaster );
+		toaster.cleanAddrIndex();
+
+		toaster = new tp.Toaster( constructors );
+		let copy = tp.fromJSON( json, toaster ) as Entity;
+		tp.resolveList( [copy], toaster );
+
+		copy.parent = null;
+		// material can be either an internal or external pointer
+
+		return copy;
 	}
 
 	// don't override! override subDestructor instead

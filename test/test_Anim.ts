@@ -25,9 +25,9 @@ function test_Anim( tf: TestFuncs ) {
 	tf.THROWS( () => new AnimField( obj, 'xx', 1 ) );
 
 	// no field with key 'a'
-	tf.THROWS( () => anim.pushFrame( new AnimFrame( {
-		'a': new AnimTarget( 0 )
-	} ) ) );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
+	tf.ASSERT_EQ( anim.pushFrame( new AnimFrame( { 'a': new AnimTarget( 0 ) } ) ), false );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
 
 	// ok
 	tf.ASSERT_EQ( obj.x, 0 );
@@ -166,12 +166,10 @@ function test_Anim( tf: TestFuncs ) {
 		'b': new AnimTarget( new Vec2( 0, -1 ) ),
 	} ) );
 
-	// type mismatch
-	tf.THROWS( () => {
-		anim.pushFrame( new AnimFrame( { 
-			'a': new AnimTarget( 1 ), 
-		} ) );
-	} );
+	// type mismatch, no push
+	tf.ASSERT_EQ( anim.threads.length, 0 );
+	tf.ASSERT_EQ( anim.pushFrame( new AnimFrame( { 'a': new AnimTarget( 1 ) } ) ), false );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
 
 	anim.update( 1.0, 1 );
 
@@ -534,17 +532,19 @@ function test_AnimFunc( tf: TestFuncs ) {
 		'x': { value: -2 },
 	} ) );
 
-	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
-		{ caller: null, funcName: 'A' } // no caller object
-	] ) ) } );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
+	tf.ASSERT_EQ( 
+		anim.pushFrame( new AnimFrame( {}, [{ caller: null, funcName: 'A' }] ) ), // no caller object
+		false );
 
-	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
-		{ caller: obj, funcName: 'y' } // not a function
-	] ) ) } );
+	tf.ASSERT_EQ( 
+		anim.pushFrame( new AnimFrame( {}, [{ caller: obj, funcName: 'y' }] ) ), // not a function
+		false );
 
-	tf.THROWS( () => { anim.pushFrame( new AnimFrame( {}, [
-		{ caller: obj, funcName: 'x' } // not a function
-	] ) ) } );
+	tf.ASSERT_EQ( 
+		anim.pushFrame( new AnimFrame( {}, [{ caller: obj, funcName: 'x' }] ) ), // not a function
+		false );
+	tf.ASSERT_EQ( anim.threads.length, 0 );
 
 	anim.pushFrame( new AnimFrame( {}, [
 		{ caller: obj, funcName: 'A' }
@@ -804,11 +804,12 @@ function test_threads( tf: TestFuncs ) {
 		'x': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored
 	} ) ); // thread 0 by default
 
-	tf.THROWS( () => {
-		anim.pushFrame( new AnimFrame( {
-			'x': { value: 2, expireOnReach: true }, // x is already present in thread 0 (duplicate target)
-		} ), { threadIndex: 1 } );
-	} );
+	tf.ASSERT_EQ( anim.threads.length, 1 );
+	tf.ASSERT_EQ(
+		 // x is already present in thread 0 (duplicate target)
+		anim.pushFrame( new AnimFrame( { 'x': { value: 2, expireOnReach: true } } ), { threadIndex: 1 } ),
+		false );
+	tf.ASSERT_EQ( anim.threads.length, 1 );
 
 	anim.pushFrame( new AnimFrame( {
 		'y': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored

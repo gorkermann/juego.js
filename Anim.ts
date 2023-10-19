@@ -185,7 +185,7 @@ export class AnimTarget {
 }
 
 let frameId = 0;
-let constructors = { 'AnimFrame': () => new AnimFrame(), 'Vec2': () => new Vec2() }
+let animConstructors = { 'AnimFrame': () => new AnimFrame(), 'Vec2': () => new Vec2() }
 
 export class AnimFrame {
 	id: number;
@@ -643,10 +643,11 @@ export class Anim {
 		return match;
 	}
 
-	pushFrame( frame: AnimFrame, options: PushFrameOptions={} ) {
+	pushFrame( frame: AnimFrame, options: PushFrameOptions={} ): boolean {
 		if ( options.delay === undefined || options.delay < 0 ) options.delay = 0;
 		if ( options.threadIndex === undefined || options.threadIndex < 0 ) options.threadIndex = 0;
 
+		let success = true;
 		let threadIndex = Math.floor( options.threadIndex );
 
 		try {
@@ -671,7 +672,11 @@ export class Anim {
 			}
 		} catch ( ex: any ) {
 			console.error( ex.message );
+
+			success = false;
 		}
+
+		return success;
 	}
 
 	getThread( sequenceKey: string, threadIndex: number=0 ): Array<AnimFrame> {
@@ -732,11 +737,11 @@ export class Anim {
 
 		// copy sequence
 		// TODO: move this elsewhere
-		let toaster = new tp.Toaster( constructors );
+		let toaster = new tp.Toaster( animConstructors );
 		let json = tp.toJSON( this.sequences[sequenceKey], toaster );
 		toaster.cleanAddrIndex();
 
-		toaster = new tp.Toaster( constructors );
+		toaster = new tp.Toaster( animConstructors );
 		let frames = tp.fromJSON( json, toaster ) as Array<AnimFrame>;
 		tp.resolveList( [frames], toaster );
 

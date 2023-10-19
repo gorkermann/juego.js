@@ -2,6 +2,7 @@ import md5 from 'md5'
 
 import { Anim, AnimFrame, AnimField, AnimTarget } from '../Anim.js'
 import { Dropdown } from '../Dropdown.js'
+import { Entity } from '../Entity.js'
 import { create, createTooltip, clear } from '../domutil.js'
 import { Editable, extRangeEdit, Range } from '../Editable.js'
 import { Inspector } from '../Inspector.js'
@@ -90,6 +91,7 @@ export class AnimPanel extends Field {
 	selectedFrameIndex: number = -1;
 	selectedFieldKey: string = '';
 	selectedSequenceKey: string = '';
+	drawFrameIndex: number = -1;
 
 	editingTarget: boolean = false;
 	editingField: boolean = false;
@@ -136,10 +138,11 @@ export class AnimPanel extends Field {
 
 		for ( let thread of threads ) {
 			for ( let frame of thread ) {
-				prehash += frame.id + ','; 
+				prehash += frame.id; 
 
 				for ( let key in frame.targets ) {
-					prehash += JSON.stringify( frame.targets[key] );
+					prehash += key;
+					prehash += frame.targets[key].value;
 				}
 			}
 		}
@@ -187,26 +190,31 @@ export class AnimPanel extends Field {
 		}
 	}
 
-	createFrameCell( frame: AnimFrame, inRow: HTMLTableRowElement, index: number ): HTMLTableColElement {
+	setFromThread( anim: Anim, thread: Array<AnimFrame>, frameIndex: number=-1 ) {
+		let touched: Dict<boolean> = {};
+
+		if ( frameIndex < 0 ) frameIndex = thread.length - 1;
+
+		for ( let i = frameIndex; i < thread.length; i++ ) {
+			for ( let key in thread[i].targets ) {
+				if ( touched[key] ) continue;
+
+				anim.fields[key].set( thread[i].targets[key].value );
+
+				touched[key] = true;
+			}
+		}
+	}
+
+	createFrameCell( frame: AnimFrame, inRow: HTMLTableRowElement, frameIndex: number ): HTMLTableColElement {
 		let cell = create( 'td', {}, inRow ) as HTMLTableColElement;
 
 		cell.onmouseup = () => {
-			this.selectedFrameIndex = index;
+			this.selectedFrameIndex = frameIndex;
 
-			// set object values
+			// set object values (only when viewing a sequence)
 			if ( this.selectedSequenceKey ) {
-				let thread = this.anim.getThread( this.selectedSequenceKey );
-				let touched: Dict<boolean> = {};
-
-				for ( let i = index; i < thread.length; i++ ) {
-					for ( let key in thread[i].targets ) {
-						if ( touched[key] ) continue;
-
-						this.anim.fields[key].set( frame.targets[key].value );
-
-						touched[key] = true;
-					}
-				}
+				this.setFromThread( this.anim, this.anim.getThread( this.selectedSequenceKey ), frameIndex );
 			}
 
 			// edit frame fields
@@ -217,6 +225,21 @@ export class AnimPanel extends Field {
 			}
 			
 			this.fieldSection.updateDom();
+		}
+
+		cell.onmouseenter = () => {
+
+			// copy object
+			this.helperEntities = [];
+
+			if ( this.linkedObjs[0] instanceof Entity ) {
+				let copy = this.linkedObjs[0].copy();
+
+				this.setFromThread( copy.anim, this.anim.getThread( this.selectedSequenceKey ), frameIndex );
+				copy.drawWireframe = true;
+
+				this.helperEntities.push( copy );
+			}
 		}
 
 		return cell;
@@ -281,6 +304,18 @@ export class AnimPanel extends Field {
 			threads.map( x => {
 				if ( x.length > maxThreadLength ) maxThreadLength = x.length;
 			} );
+
+			// copy object
+			this.helperEntities = [];
+
+			if ( this.linkedObjs[0] instanceof Entity ) {
+				let copy = this.linkedObjs[0].copy();
+
+				this.setFromThread( copy.anim, this.anim.getThread( this.selectedSequenceKey ) );
+				copy.drawWireframe = true;
+
+				this.helperEntities.push( copy );
+			}
 
 			// container
 			clear( this.frameDom );
