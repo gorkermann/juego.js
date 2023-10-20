@@ -8,7 +8,6 @@ import { Keyboard, KeyCode } from './keyboard.js'
 import { GenericMode } from './mode/Mode.js'
 import { Mouse } from './Mouse.js'
 import { Selector } from './Selector.js'
-import { Inspector } from './Inspector.js'
 
 export class Controller {
 	commandList: Array<CommandRef>
@@ -210,7 +209,7 @@ export class Controller {
 			throw new Error( 'Controller.initMouse: no element with id ' + areaId );
 		}
 
-		area.onkeydown = ( e: KeyboardEvent ) => {
+		document.onkeydown = ( e: KeyboardEvent ) => {
 			Keyboard.downHandler( e );
 
 			if ( Keyboard.keyHit( KeyCode.BSLASH ) ) {
@@ -240,7 +239,7 @@ export class Controller {
 			}			
 		} 
 
-		area.onkeyup = ( e ) => {
+		document.onkeyup = ( e ) => {
 			Keyboard.upHandler( e );
 
 			this.mode.keyboard( this );
@@ -261,9 +260,5 @@ export class Controller {
 		if ( !oldPos.equals( this.cursor ) ) {
 			this.mode.mousemove( this );
 		}
-	}
-
-	inspect( prims: Array<Editable> ) {
-		let panel = Inspector.inspectByQuery( prims.map( x => x.id ).join( ',' ) );
 	}
 }

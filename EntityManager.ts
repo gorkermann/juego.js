@@ -165,9 +165,12 @@ export class EntityManager {
 		this.entities.push( entity );
 
 		entity.doForAllChildren( ( e: Entity ) => {
-			if ( e.id < 0 || this.entitiesById[e.id] ) {
+			if ( this.entitiesById[e.id] ) {
+				e.id = -1;
+			}
 
-				// search for lowest unused id
+			// search for lowest unused id
+			if ( e.id < 0 ) {
 				for ( let i = 0; i < this.entitiesById.length; i++ ) {
 					if ( !this.entitiesById[i] ) {
 						this.entitiesById[i] = e;

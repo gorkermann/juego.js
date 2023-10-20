@@ -7,6 +7,15 @@ import { Vec2 } from '../Vec2.js'
 import { create } from '../domutil.js'
 import { unorderedArraysMatch, fancyType } from '../util.js'
 
+export class TypeMismatchError extends Error {
+	constructor( message: string ) {
+		super();
+
+		this.name = 'TypeMismatch';
+		this.message = message;
+	}	
+}
+
 function getSharedRange( objs: Array<Editable>, varname: string ): Array<string> {
 	let shared: Array<string> = [];
 
@@ -125,12 +134,12 @@ export class Field {
 			 	 type: string ) {
 		for ( let i = 0; i < objs.length; i++ ) {
 			if ( !( varname in objs[i] ) ) {
-				throw new Error( 'Field.constructor: no field ' + varname + ' in object ' + i );
+				throw new TypeMismatchError( 'Field.constructor: no field ' + varname + ' in object ' + i );
 			}
 
 			if ( fancyType( ( objs[i] as any )[varname] ) != type ) {
-				throw new Error( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + i + 
-								 '(' + fancyType( ( objs[i] as any )[varname] ) + '!=' + type );
+				throw new TypeMismatchError( 'Field.constructor: type mismatch for field ' + varname + ' in object ' + i + 
+								 ' (' + fancyType( ( objs[i] as any )[varname] ) + '!=' + type + ')' );
 			}	
 		}
 

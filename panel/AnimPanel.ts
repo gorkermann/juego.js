@@ -5,7 +5,6 @@ import { Dropdown } from '../Dropdown.js'
 import { Entity } from '../Entity.js'
 import { create, createTooltip, clear } from '../domutil.js'
 import { Editable, extRangeEdit, Range } from '../Editable.js'
-import { Inspector } from '../Inspector.js'
 import { fancyType } from '../util.js'
 
 import { Field, createObjectLink, getDisplayVarname } from './Field.js'

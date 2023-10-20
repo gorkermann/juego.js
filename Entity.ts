@@ -79,7 +79,6 @@ export class Entity {
 
 	material: Material = new Material( 0, 0, 0 );
 
-	isPlayer: boolean = false;		// Entity is controlled by a player
 	removeThis: boolean = false;	// Removal flag. Entities with this flag set will be removed from the game
 
 	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game 
@@ -94,7 +93,7 @@ export class Entity {
 	/* fields from Editable */
 
 	edit: ( varname: string, value: any ) => void = rangeEdit;
-	editFields: Array<string> = ['parent', 'pos', 'angle', '_subs', 'anim'];
+	editFields: Array<string> = ['name', 'parent', 'pos', 'angle', '_subs', 'anim'];
 	ranges: Dict<Range> = {};
 
 	savedVals: Dict<any> = {};
@@ -488,6 +487,12 @@ export class Entity {
 
 		if ( this.parent.hovered ) return true;
 		else return this.parent.anyParentHovered();
+	}
+
+	getRoot(): Entity {
+		if ( !this.parent ) return this;
+
+		return this.parent.getRoot();
 	}
 
 	select() {}
