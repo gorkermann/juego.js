@@ -46,7 +46,7 @@ type A = {
 }
 
 function sortA( a: A, b: A ) {
-	return Vec2.sortXY( a.point, b.point );
+	//return Vec2.sortXY( a.point, b.point );
 }
 
 export class ShapeHit extends RayHit {
@@ -69,6 +69,10 @@ export enum LoopDir {
 type EdgeContact = {
 	point: Vec2;
 	index: number;
+}
+
+type ShapeStrokeOptions = {
+	setStyle?: boolean
 }
 
 export class Shape {
@@ -116,6 +120,8 @@ export class Shape {
 
 		return s;
 	}
+
+	/* factories */
 
 	// Make a polygon from a list of points
 	// can specify LoopDir to avoid calculation of turnAngle
@@ -261,12 +267,15 @@ export class Shape {
 								  max, new Vec2( min.x, max.y ) ] );
 	}
 
-	offset( offset: Vec2 ): Shape {
-		for ( let point of this.points ) {
-			point.add( offset );
-		}
+	forEachIndex( func: ( i: number, iNext: number ) => void, start: number=0 ) {
+		let i, iNext;
 
-		return this;
+		for ( let j = 0; j < this.points.length; j++ ) {
+			i = ( j + start ) % this.points.length
+			iNext = ( i + 1 ) % this.points.length;
+
+			func( i, iNext );
+		}
 	}
 
 	intersect( line: Line ): Array<Vec2> {
@@ -320,22 +329,6 @@ export class Shape {
 		result.sort( ( a: ShapeHit, b: ShapeHit ) => a.dist - b.dist );
 
 		return result;
-	}
-
-	getTransformedBBox( step: number ): Shape {
-		let bbox = Shape.getBoundingBox( this.points );
-
-		if ( !this.parent ) return bbox;
-
-		for ( let point of bbox.points ) {
-			this.parent.applyTransform( point, step ); 
-		}
-
-		for ( let normal of this.normals ) { 
-			this.parent.applyTransform( normal, step, { angleOnly: true } );
-		}
-
-		return bbox;
 	}
 
 	vertIntersectCount( point: LocalPoint, y: number ) {
@@ -508,6 +501,7 @@ export class Shape {
 			let inter0, inter1: EdgeContact;
 			let len, maxLenSq = 0;
 
+			// find the two intersections that are farthest apart
 			for ( let i = 0; i < inters.length; i++ ) {
 				for ( let j = i + 1; j < inters.length; j++ ) {
 					len = inters[i].point.distToSq( inters[j].point );
@@ -520,6 +514,7 @@ export class Shape {
 				}
 			}
 
+			// find the contact normal
 			point = inter0.point;
 			slice = this.slice( Line.fromPoints( inter0.point, inter1.point ) );
 
@@ -529,13 +524,12 @@ export class Shape {
 			} else {
 				normal = inter1.point.minus( inter0.point ).normalize();
 				if ( slice > 0.5 ) {
-					normal.rotate( -Math.PI / 2 )	
+					normal.rotate( -Math.PI / 2 ); 
 				} else {
 					normal.rotate( Math.PI / 2 );
+					slice = 1 - slice;
 				}
 			}
-
-			//if ( inters.length > 2 ) console.log( 'oh boy' );
 
 			// compare velocities at intersections to find the fastest
 			// (a rotating object will create multiple contacts with different velocities)
@@ -548,7 +542,8 @@ export class Shape {
 			}
 		}
 
-		// velocity of the contact point projected onto the contact normal
+		// get component of velocity parallel to normal
+		// use that as magnitude of contact velocity
 		let nvel = normal.times( vel.dot( normal ) );
 
 		// create contact
@@ -603,17 +598,7 @@ export class Shape {
 		return sum / 2;
 	}
 
-	forEachIndex( func: ( i: number, iNext: number ) => void, start: number=0 ) {
-		let i, iNext;
-
-		for ( let j = 0; j < this.points.length; j++ ) {
-			i = ( j + start ) % this.points.length
-			iNext = ( i + 1 ) % this.points.length;
-
-			func( i, iNext );
-		}
-	}
-
+	// how much of the shape is to the left of the line (0.0=none, 0.5=half, 1.0=all)
 	slice( line: Line ): number {
 		// check whether any of the points are on different sides of the line
 		let sides = line.whichSide( this.points );
@@ -794,31 +779,6 @@ export class Shape {
 
 	/* drawing methods */
 
-	getEdgeMaterial( index: number ): Material {
-		if ( index > this.edges.length ) {
-			throw new Error( 'Shape.getEdgeMaterial: Index out of range ( ' + index + '>' + this.edges.length + ')' );
-		}
-
-		let material = this.edges[index].material;
-		if ( !material ) material = this.material;
-
-		return material;
-	}
-
-	startPathAt( context: CanvasRenderingContext2D, index: number ): Material {
-		if ( index > this.points.length ) {
-			throw new Error( 'Shape.startPathAt: Index out of range ( ' + index + '>' + this.points.length + ')' );
-		}
-
-		let material = this.getEdgeMaterial( index );
-		context.strokeStyle = material.getFillStyle();
-
-		context.beginPath();
-		context.moveTo( this.points[index].x, this.points[index].y );
-
-		return material;
-	}
-
 	sphericalStroke( context: CanvasRenderingContext2D, origin: Vec2, ir: number, lens: number ): void {
 		context.lineWidth = 1;
 
@@ -836,7 +796,6 @@ export class Shape {
 			iNext = ( i + 1 ) % this.points.length;
 
 			v1 = v[i];
-			let r1 = ir - ir * lens / ( v1.length() ** 0.5 + 1 );
 			v2 = v[iNext];
 
 			let diff = v2.minus( v1 );
@@ -845,10 +804,10 @@ export class Shape {
 
 			let uDiff = diff.unit();
 
-			let l = 0;
-			let maxAngle = 4 / 180 * Math.PI;
+			let maxArc = 4 / 180 * Math.PI; // longest arc allowed is 4 degrees
 
 			let p, d: Vec2;
+			let l = 0; // loop variable, distance from v1 toward v2
 
 			do {
 				p = v1.alongTo( v2, l / dist );
@@ -864,15 +823,14 @@ export class Shape {
 					context.lineTo( d.x, d.y );
 				}
 
+				// find a point maxArc radians farther along the line
 				let dot = p.dot( uDiff ) / pLen;
-				let angle = Math.acos( dot );
-				if ( dot < 0 ) angle = Math.PI - angle;
-				let phi = Math.PI - angle - maxAngle;
+				let angle = Math.abs( Math.acos( dot ) );
 
-				if ( phi < 0 ) break;
+				let phi = angle - maxArc;
+				if ( phi < 0 ) break; // this means that angle is close to 0, so the line being drawn looks like a point
 
-				l += pLen * Math.sin( maxAngle ) / Math.sin( phi );
-				//last = p;
+				l += pLen / Math.sin( phi ) * Math.sin( maxArc ); // law of sines to find side length opppsite central angle (maxArc) 
 
 			} while ( l < dist );
 
@@ -900,29 +858,44 @@ export class Shape {
 		context.stroke();
 	}
 
-	basicStroke( context: CanvasRenderingContext2D ): void {
-		context.beginPath();
-
-		for ( let i = 0; i < this.points.length; i++ ) {
-			if ( i == 0 ) {
-				context.moveTo( this.points[i].x, this.points[i].y );
-			} else {
-				context.lineTo( this.points[i].x, this.points[i].y );
-			}
+	getEdgeMaterial( index: number ): Material {
+		if ( index < 0 || index >= this.edges.length ) {
+			throw new Error( 'Shape.getEdgeMaterial: Index out of range ( ' + index + ', len=' + this.edges.length + ')' );
 		}
 
-		context.closePath();
-		context.stroke();
+		let material = this.edges[index].material;
+		if ( !material ) material = this.material;
+
+		return material;
 	}
 
-	stroke( context: CanvasRenderingContext2D ): void {
-		context.lineWidth = 1;
+	switchLineMaterial( context: CanvasRenderingContext2D, index: number ): Material {
+		if ( index < 0 || index >= this.points.length ) {
+			throw new Error( 'Shape.switchLineMaterial: Index out of range ( ' + index + ', len=' + this.points.length + ')' );
+		}
 
-		let material = this.startPathAt( context, 0 );
-		context.strokeStyle = this.material.getFillStyle();
-		let startIndex = -1;
+		let material = this.getEdgeMaterial( index );
+		context.strokeStyle = material.getFillStyle();
 
 		context.beginPath();
+		context.moveTo( this.points[index].x, this.points[index].y );
+
+		return material;
+	}
+
+	stroke( context: CanvasRenderingContext2D, options: ShapeStrokeOptions={} ): void {
+		if ( options.setStyle === undefined ) options.setStyle = true;
+
+		let material: Material;
+
+		if ( options.setStyle ) {
+			context.lineWidth = 1;
+
+			material = this.getEdgeMaterial( 0 );
+			context.strokeStyle = material.getFillStyle();
+		}
+		
+		let startIndex = -1;
 
 		for ( let i = 0; i < this.points.length; i++ ) {
 			if ( i == 0 ) {
@@ -932,40 +905,17 @@ export class Shape {
 				context.lineTo( this.points[i].x, this.points[i].y );
 			}
 
-			if ( material != this.getEdgeMaterial( i ) ) {
+			if ( options.setStyle && material != this.getEdgeMaterial( i ) ) {
 				context.stroke();
 
-				material = this.startPathAt( context, i );
+				material = this.switchLineMaterial( context, i );
 				startIndex = i;
 			}
 		}
 
-		if ( startIndex == 0 ) {
-			context.closePath();
-		} else {
-			context.lineTo( this.points[0].x, this.points[0].y );
-		}
-
+		context.lineTo( this.points[0].x, this.points[0].y );
 		context.stroke();
 	}
-
-	/*
-		ellipse thing
-
-			let v1 = this.points[i].minus( origin );
-			let r1 = 190.5 - 190.5 / ( Math.sqrt( v1.length() ) + 1 );
-			let v2 = this.points[iNext].minus( origin );
-			let r2 = 190.5 - 190.5 / ( Math.sqrt( v2.length() ) + 1 );
-
-			let cos = v1.dot( v2 ) / v1.length() / v2.length();
-			let theta = Math.acos( cos );
-			let r2cos = ( r2 * cos ) ** 2;
-			let b = Math.sqrt( Math.abs( (r2*r2 - r2cos ) / ( 1 - r2cos / ( r1*r1 ) ) ) );
-			let cross = v1.cross( v2 );
-
-			context.ellipse( origin.x, origin.y, r1, b, v1.angle(), 0, theta * ( cross < 0 ? -1 : 1 ), cross < 0 );
-
-	 */
 
 	fill( context: CanvasRenderingContext2D ): void {
 		context.fillStyle = this.material.getFillStyle();
@@ -979,15 +929,5 @@ export class Shape {
 
 		context.closePath();
 		context.fill();
-	}
-
-	materialDraw( context: CanvasRenderingContext2D ): void {
-		for ( let edge of this.edges ) {
-			if ( edge.material ) {
-				context.strokeStyle = "blue";
-			} else context.strokeStyle = "red";
-
-			edge.draw( context );
-		}
 	}
 }

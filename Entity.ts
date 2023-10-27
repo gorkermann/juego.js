@@ -584,7 +584,7 @@ export class Entity {
 		let shapes = this.getShapes( 0.0 );
 
 		for ( let shape of shapes ) {
-			shape.basicStroke( context );
+			shape.stroke( context, { setStyle: false } );
 		}
 	}
 
@@ -606,19 +606,19 @@ export class Entity {
 				context.strokeStyle = 'fuchsia';
 				context.lineWidth = 6;
 				context.globalAlpha = 0.3;
-				shape.basicStroke( context );
+				shape.stroke( context, { setStyle: false } );
 
 			} else if ( shape.parent.hovered ) {
 				context.strokeStyle = 'yellow';
 				context.lineWidth = 6;
 				context.globalAlpha = 0.3;
-				shape.basicStroke( context );
+				shape.stroke( context, { setStyle: false } );
 
 			} else if ( shape.parent.anyParentHovered() ) {
 				context.strokeStyle = 'white';
 				context.lineWidth = 2;
 				context.globalAlpha = 0.3;
-				shape.basicStroke( context );
+				shape.stroke( context, { setStyle: false } );
 			}
 		}
 

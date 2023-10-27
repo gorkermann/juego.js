@@ -151,6 +151,7 @@ function test_EntityOverlap( tf: TestFuncs ) {
 
 	e1.collisionMask = 0x01;
 	e2.collisionGroup = 1;
+	
 	let contacts = e1.overlaps( e2, 0.0 ); 
 	tf.ASSERT( e1.canBeHitBy( e2 ) ); // e1.mask & e2.group > 0
 	tf.ASSERT( !e2.canBeHitBy( e1 ) ); // e2 has no collision mask set, so accepts no collisions
@@ -159,7 +160,13 @@ function test_EntityOverlap( tf: TestFuncs ) {
 
 	/* e2 is moving */
 
+	e1 = new Entity( new Vec2( 0, 0 ), 20, 20 );
+	e1.collisionMask = 0x01;
+
+	e2 = new Entity( new Vec2( 10, 0 ), 10, 10 );
 	e2.vel = new Vec2( 10, 0 ); // next position would be (20, 0), outside of e1
+	e2.collisionGroup = 1;
+
 	tf.ASSERT_EQ( e1.overlaps( e2, 1.0 ).length, 0 );
 
 	contacts = e1.overlaps( e2, 0.0 ); 
@@ -174,9 +181,14 @@ function test_EntityOverlap( tf: TestFuncs ) {
 
 	/* e1+e1ito overlaps e2 */
 
-	// add a subentity
+	e1 = new Entity( new Vec2( 0, 0 ), 20, 20 );
+	e1.collisionMask = 0x01;
 	let e1ito = new Entity( new Vec2( 15, 0 ), 10, 20 );
 	e1.addSub( e1ito );
+
+	e2 = new Entity( new Vec2( 10, 0 ), 10, 10 );
+	e2.vel = new Vec2( 10, 0 ); // next position would be (20, 0), outside of e1 but inside e1ito
+	e2.collisionGroup = 1;
 
  	// e2 fully inside e1ito, e1ito has no collision group set
  	// (parent is used be default)

@@ -1,5 +1,6 @@
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
+import { IsoTriangleEntity } from '../BasicEntity.js'
 import { Entity } from '../Entity.js'
 import { Line } from '../Line.js'
 import { Material } from '../Material.js'
@@ -12,6 +13,27 @@ function testIntersect( tf: TestFuncs, l1: Line, l2: Line, point: Vec2 ) {
 
 	tf.ASSERT_EQ( l1.intersects( l2 ), point, {}, msg );
 	tf.ASSERT_EQ( l2.intersects( l1 ), point, {}, msg );
+}
+
+function test_bounds( tf: TestFuncs ) {
+
+	// getBoundingWidth()
+	// getBoundingHeight()
+	let s = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 20 );
+
+	tf.ASSERT_EQ( Shape.getBoundingWidth( s.points ), 10 );
+	tf.ASSERT_EQ( Shape.getBoundingHeight( s.points ), 20 );
+
+	// getBoundingBox()
+	let s2 = Shape.makeRectangle( new Vec2( 50, 50 ), 10, 20 );
+	let bbox = Shape.getBoundingBox( s.points.concat( s2.points ) );
+
+	tf.ASSERT_EQ( bbox.points.length, 4 );
+
+	let [min, max] = Shape.getMinMax( bbox.points );
+
+	tf.ASSERT_EQ( min, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( max, new Vec2( 60, 70 ) );
 }
 
 function test_Shape( tf: TestFuncs ) {
@@ -101,16 +123,6 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.normals[4], new Vec2( -0.7071, 0.7071 ) );
 	tf.ASSERT_EQ( s.normals[7], new Vec2( -0.7071, -0.7071 ) );
 	tf.ASSERT_EQ( s.normals[10], new Vec2( 0.7071, -0.7071 ) );
-
-
-	// offset
-	s = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 5 );
-	s.offset( new Vec2( 1, 2 ) );
-
-	tf.ASSERT_EQ( s.points[0], new Vec2( 1, 2 ) );
-	tf.ASSERT_EQ( s.points[1], new Vec2( 11, 2 ) );
-	tf.ASSERT_EQ( s.points[2], new Vec2( 11, 7 ) );
-	tf.ASSERT_EQ( s.points[3], new Vec2( 1, 7 ) );
 
 
 	// intersect
@@ -341,6 +353,159 @@ function test_ShapeContains( tf: TestFuncs ) {
 	}
 }
 
+function test_getEdgeContact( tf: TestFuncs ) {
+
+	/* single intersection */
+
+	let sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	let tri = Shape.fromPoints( [new Vec2( 10, 5 ), new Vec2( 15, 0 ), new Vec2( 15, 5 )] );
+
+	let contact = tri.getEdgeContact( sq );
+
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( 1, 0 ) );
+	tf.ASSERT_EQ( contact.slice, 1.0 );
+
+	contact = sq.getEdgeContact( tri );
+
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -0.7071, -0.7071 ) ); // one edge of triangle is chosen
+	tf.ASSERT_EQ( contact.slice, 0.875 );
+
+
+	/* two intersections on one edge */
+
+	sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	tri = Shape.fromPoints( [new Vec2( 10, 5 ), new Vec2( 15, 0 ), new Vec2( 15, 5 )] );
+	tri.points.map( x => x.add( new Vec2( -2, 0 ) ) );
+
+	contact = tri.getEdgeContact( sq );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( 1, 0 ) );
+	tf.ASSERT_EQ( contact.slice, 10.5 / 12.5 );
+
+	contact = sq.getEdgeContact( tri );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+	tf.ASSERT_EQ( contact.slice, 1 );
+
+
+	/* two intersections on different edges (corner) */
+
+	sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	let sq2 = Shape.makeRectangle( new Vec2( 8, 8 ), 10, 10 );
+
+	contact = sq.getEdgeContact( sq2 );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -0.7071, -0.7071 ) );
+	tf.ASSERT_EQ( contact.slice, 0.98 );
+
+	contact = sq2.getEdgeContact( sq );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( 0.7071, 0.7071 ) );
+	tf.ASSERT_EQ( contact.slice, 0.98 );
+
+
+	/* two intersections on different edges (flat) */
+
+	sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	sq2 = Shape.makeRectangle( new Vec2( -5, 8 ), 20, 10 );
+
+	contact = sq.getEdgeContact( sq2 );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( 0, -1 ) );
+	tf.ASSERT_EQ( contact.slice, 0.2 );
+
+	contact = sq2.getEdgeContact( sq );
+
+	tf.ASSERT( contact !== null );
+	//tf.ASSERT_EQ( contact.point, new Vec2( 10, 5 ) );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( 0, 1 ) );
+	tf.ASSERT_EQ( contact.slice, 1 );
+
+
+	/* with velocity (flat) */
+	// (as if step=0.0)	
+
+	sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	sq2 = Shape.makeRectangle( new Vec2( 8, 4 ), 2, 2 );
+
+	let e2 = new Entity( new Vec2( 0, 0 ), 0, 0 );
+	sq2.parent = e2;
+
+	e2.vel = new Vec2( -2, 0 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( -2, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+
+	e2.vel = new Vec2( -2, 2 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( -2, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+
+	e2.vel = new Vec2( 0, 2 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+
+	e2.vel = new Vec2( 2, 2 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 2, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+
+	e2.vel = new Vec2( 2, 0 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( 2, 0 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -1, 0 ) );
+
+
+	/* with velocity (corner) */
+	// (as if step=0.0)	
+
+	sq = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	sq2 = Shape.makeRectangle( new Vec2( 9, 9 ), 2, 2 );
+
+	e2 = new Entity( new Vec2( 0, 0 ), 0, 0 );
+	sq2.parent = e2;
+
+	e2.vel = new Vec2( -2, 0 );
+
+	contact = sq.getEdgeContact( sq2 );
+	tf.ASSERT( contact !== null );
+	tf.ASSERT_EQ( contact.vel, new Vec2( -1, -1 ) );
+	tf.ASSERT_EQ( contact.normal, new Vec2( -0.7071, -0.7071 ) );
+}
+
 function test_getBodyContact( tf: TestFuncs ) {
     let e = new Entity( new Vec2( 50, 50 ), 100, 100 );
     let s = e.getOwnShapes()[0];
@@ -453,21 +618,42 @@ function test_booleanOps( tf: TestFuncs ) {
 	s.material = new Material( 45, 0, 0.5 );
 	s2.material = new Material( 90, 0, 0.5 );
 
-	union = Shape.union( [s], [s2] );
+	union = Shape.union( [s], [s2] ); // some verts of s appear in the union
 
-	tf.ASSERT( union[0].material != s.material );
+	tf.ASSERT( union[0].material != s.material ); // new material, same hue
 	tf.ASSERT_EQ( union[0].material.hue, 45 );
 
 	s2 = Shape.makeRectangle( new Vec2( -5, -5 ), 20, 20 );
 	s2.material = new Material( 90, 0, 0.5 );
 
-	union = Shape.union( [s], [s2] );
+	union = Shape.union( [s], [s2] ); // no verts if s appear in the union
 
-	tf.ASSERT( union[0].material != s.material );
+	tf.ASSERT( union[0].material != s.material ); // new material, same hue
 	tf.ASSERT_EQ( union[0].material.hue, 45 );
 }
 
+function test_draw( tf: TestFuncs ) {
+
+	// getEdgeMaterial()
+	let s = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	s.edges[0].material = new Material( 15, 0, 0.5 );
+	s.edges[1].material = new Material( 30, 0, 0.5 );
+
+	tf.THROWS( () => s.getEdgeMaterial( -1 ) );
+	tf.THROWS( () => s.getEdgeMaterial( 4 ) );
+
+	tf.ASSERT( s.getEdgeMaterial( 0 ) == s.edges[0].material );
+	tf.ASSERT( s.getEdgeMaterial( 1 ) == s.edges[1].material );
+	tf.ASSERT( s.getEdgeMaterial( 2 ) == s.material );
+}
+
 let tests: Array<Test> = [];
+
+tests.push( new Test( 'Shape',
+					  test_bounds,
+					  ['getBoundingWidth',
+					   'getBoundingHeight',
+					   'getBoundingBox'] ) );
 
 tests.push( new Test( 'Shape',
 					  test_Shape,
@@ -487,7 +673,8 @@ tests.push( new Test( 'Shape',
 
 tests.push( new Test( 'Shape',
 					  test_ShapeSlice,
-					  ['slice'], 
+					  ['slice',
+					   'forEachIndex'], 
 					  [] ) );
 
 tests.push( new Test( 'Shape',
@@ -497,12 +684,24 @@ tests.push( new Test( 'Shape',
 					   'vertIntersectCount'], 
 					  [] ) );
 
-tests.push(new Test('Shape', test_getBodyContact, ['getBodyContact'], []));
+tests.push( new Test( 'Shape', test_getEdgeContact, ['getEdgeContact'] ) );
+tests.push( new Test( 'Shape', test_getBodyContact, ['getBodyContact'] ) );
 
-tests.push(new Test('Shape', test_booleanOps,
+tests.push( new Test( 'Shape', test_booleanOps,
 							['fromMultiPoly',
+							 'doBool',
 							 'union',
 							 'intersection',
-							 'difference'], []));
+							 'difference'] ) );
+
+tests.push( new Test( 'Shape', 
+					 test_draw, 
+					 ['getEdgeMaterial'],
+					 ['sphericalStroke',
+					  'switchLineMaterial',
+					  'stroke',
+					  'fill'] ) );
+
+tests.push( new Test( 'Shape.function', ( tf: TestFuncs ) => tf.ASSERT( true ), [], ['ShapeHit'] ) );
 
 export default tests;
