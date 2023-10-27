@@ -6,6 +6,8 @@
 	A polygon (a single, non-self-intersecting closed loop of line segments)
  */
 
+import * as polyclip from 'polyclip-ts'
+
 import { Entity } from './Entity.js'
 import { Contact } from './Contact.js'
 import { Vec2 } from './Vec2.js'
@@ -18,8 +20,8 @@ import { Debug } from './Debug.js'
 
 let zeroVector = new Vec2( 0, 0 );
 
-type WorldPoint = Vec2
-type LocalPoint = Vec2
+export type WorldPoint = Vec2
+export type LocalPoint = Vec2
 type Dir = Vec2
 
 /*
@@ -36,6 +38,16 @@ function getTurnAngle( l1: Line, l2: Line ) {
 }
 
 let VEL_EPSILON = 0.0001
+
+type A = {
+	point: Vec2;
+	edge?: Line;
+	shape: Shape;
+}
+
+function sortA( a: A, b: A ) {
+	return Vec2.sortXY( a.point, b.point );
+}
 
 export class ShapeHit extends RayHit {
 	shape: Shape;
@@ -77,25 +89,30 @@ export class Shape {
 
 		s.parent = this.parent;
 
-		// copy edges and points
-		for ( let i = 0; i < this.edges.length; i++ ) {
-			s.edges.push( this.edges[i].copy() );
-			s.points.push( s.edges[i].p1 );
+		// copy points
+		for ( let i = 0; i < this.points.length; i++ ) {
+			s.points.push( this.points[i].copy() );
 		}
 
-		// connect edges, copy normals
+		// copy edges
+		for ( let i = 0; i < this.points.length; i++ ) {
+			s.edges.push( Line.fromPoints( s.points[i], s.points[(i+1) % s.points.length] ) );
+		}
+
 		for ( let i = 0; i < this.edges.length; i++ ) {
-			if ( i < s.edges.length - 1 ) {
-				s.edges[i].p2 = s.edges[i+1].p1;
+			s.edges[i].material = null;
+
+			if ( this.edges[i].material ) {
+				s.edges[i].material = this.edges[i].material.copy();
 			}
-
-			s.normals[i] = this.normals[i].copy();
+			s.normals.push( this.normals[i].copy() );
 		}
-		s.edges[s.edges.length - 1].p2 = s.edges[0].p2;
 
 		// copy materials
 		if ( !this.material ) s.material = null;
-		else s.material = this.material.copy(); 
+		else s.material = this.material.copy();
+
+		s.hollow = this.hollow;
 
 		return s;
 	}
@@ -110,17 +127,20 @@ export class Shape {
 			throw new Error( 'Shape.fromPoints: ' + points.length + ' points given, at least 3 required' );
 		}
 
-		let turnAngle = 0;
-
-		shape.points.push( points[0] );
-
 		for ( let i = 1; i < points.length; i++ ) {
 			let firstIndex = points.indexOf( points[i] );
 			if ( firstIndex >= 0 && firstIndex != i ) {
 				throw new Error( 'Shape.fromPoints: Points must be unique (indices ' + 
 								 firstIndex + ' and ' + i + ' are the same object)' );
 			}
+		}
 
+		let turnAngle = 0;
+		shape.points = [points[0]];
+		shape.edges = [];
+		shape.normals = [];
+
+		for ( let i = 1; i < points.length; i++ ) {
 			shape.points.push( points[i] );
 			shape.edges.push( Line.fromPoints( points[i-1], points[i] ) );
 
@@ -153,6 +173,31 @@ export class Shape {
 		}
 
 		return shape;
+	}
+
+	static fromMultiPoly( multiPoly: number[][][][] ): Array<Shape> {
+		if ( multiPoly.length == 0 ) {
+			return [];
+		}
+
+		let shapes = [];
+
+		for ( let poly of multiPoly ) {
+			if ( poly.length == 0 ) {
+				throw new Error( 'Shape.fromMultiPoly: Empty poly' );
+			}
+
+			if ( poly.length > 1 ) {
+				console.warn( 'Shape.fromMultiPoly: Ignoring interior void' );
+			}
+
+			let points = poly[0].map( x => new Vec2( x[0], x[1] ) );
+			points.pop(); // last point of geoJSON ring is a repeat of the first
+
+			shapes.push( Shape.fromPoints( points ) );
+		}
+
+		return shapes;
 	}
 
 	// Make a rectangle
@@ -643,6 +688,111 @@ export class Shape {
 
 		return leftArea / this.getArea();
 	}
+
+	/* boolean operations */
+
+	static doBool( op: string, shapes1: Array<Shape>, shapes2: Array<Shape> ): Array<Shape> {
+		let multiPoly: number[][][][] = null;
+
+		let rings1 = shapes1.map( s => [s.points.map( p => [p.x, p.y] ) as Array<[number, number]>] );
+		let rings2 = shapes2.map( s => [s.points.map( p => [p.x, p.y] ) as Array<[number, number]>] );
+
+		if ( op == 'union' ) {
+			multiPoly = polyclip.union( rings1, rings2 );
+		} else if ( op == 'intersection' ) {
+			multiPoly = polyclip.intersection( rings1, rings2 );
+		} else if ( op == 'difference' ) {
+			multiPoly = polyclip.difference( rings1, rings2 );
+		} else {
+			throw new Error( 'Shape.doBool: Invalid operation ' + op );
+		}
+
+		let newShapes = Shape.fromMultiPoly( multiPoly );
+
+		// reassign materials
+		// (doesn't retain edge materials)
+		for ( let newShape of newShapes ) {
+			let superContinue = false;
+
+			for ( let shape of shapes1 ) {
+				for ( let point of shape.points ) {
+					if ( newShape.contains( point ) ) {
+
+						newShape.material = shape.material.copy();
+
+						superContinue = true;
+						break;
+					}
+				}
+
+				if ( superContinue ) break;
+			}
+		}
+
+		/*
+		sort shape array points by x, then y, to match up and transfer edge materials
+
+		let newA = [];
+		let A1 = [];
+
+		for ( let shape of newShapes ) {
+			for ( let point of shape.points ) {
+				newA.push( { point: point, shape: shape } ); 
+			}
+		}
+		newA.sort( sortA );
+
+		for ( let shape of shapes1 ) {
+			for ( let point of shape.points ) {
+				A1.push( { point: point, shape: shape } ); 
+			}
+		}
+		A1.sort( sortA );
+
+		let i = 0;
+		let j = 0;
+
+		while ( i < A1.length && j < newA.length ) {
+			let a1 = A1[i];
+			let na = newA[j]
+
+			if ( a1.point.equals( na.point ) ) {
+				if ( !na.shape.material ) {
+					na.shape.material = a1.shape.material;
+				}
+
+				i++;
+				j++;
+
+			} else if ( a1.point.equalsX( na.point ) ) {
+				if ( a1.point.y < na.point.y ) {
+					i++;
+				} else {
+					j++;
+				}
+			} else if ( a1.point.x < na.point.x ) {
+				i++;
+			} else {
+				j++;
+			}
+		}*/
+
+		return newShapes;
+	}
+
+	static union( shapes1: Array<Shape>, shapes2: Array<Shape> ): Array<Shape> {
+		return Shape.doBool( 'union', shapes1, shapes2 );
+	}
+
+	static intersection( shapes1: Array<Shape>, shapes2: Array<Shape> ): Array<Shape> {
+		return Shape.doBool( 'intersection', shapes1, shapes2 );
+	}
+
+	static difference( shapes1: Array<Shape>, shapes2: Array<Shape> ): Array<Shape> {
+		return Shape.doBool( 'difference', shapes1, shapes2 );
+	}
+
+	/* drawing methods */
 
 	getEdgeMaterial( index: number ): Material {
 		if ( index > this.edges.length ) {

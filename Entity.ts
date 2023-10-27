@@ -18,7 +18,7 @@ import { Line } from './Line.js'
 import { Material } from './Material.js'
 import { Contact } from './Contact.js'
 import { Debug } from './Debug.js'
-import { Shape } from './Shape.js'
+import { Shape, LocalPoint, WorldPoint } from './Shape.js'
 import { Dict } from './util.js'
 
 export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null ): Array<any> {
@@ -45,6 +45,10 @@ type ApplyTransformOptions = {
 	local?: boolean
 }
 
+type UnapplyTransformOptions = {
+	angleOnly?: boolean,
+}
+
 export enum TransformOrder {
 	TRANSLATE_THEN_ROTATE = 0,
 	ROTATE_THEN_TRANSLATE
@@ -69,6 +73,8 @@ export class Entity {
 	width: number;
 	height: number;
 
+	presetShapes: Array<Shape> = [];
+
 	isGhost: boolean = false; // don't generate shapes for ghosts (don't draw or collide)
 	collisionGroup: number = 0; 
 
@@ -77,7 +83,7 @@ export class Entity {
 	collisionMask: number = 0x00; 
 	isPliant: boolean = false;
 
-	material: Material = new Material( 0, 0, 0 );
+	material: Material = new Material( 0, 0, 0.5 );
 
 	removeThis: boolean = false;	// Removal flag. Entities with this flag set will be removed from the game
 
@@ -93,8 +99,10 @@ export class Entity {
 	/* fields from Editable */
 
 	edit: ( varname: string, value: any ) => void = rangeEdit;
-	editFields: Array<string> = ['name', 'parent', 'pos', 'angle', '_subs', 'anim'];
-	ranges: Dict<Range> = {};
+	editFields: Array<string> = ['name', 'parent', 'pos', 'angle', 'width', 'height', '_subs', 'anim'];
+	ranges: Dict<Range> = {
+		angle: 'real',
+	};
 
 	savedVals: Dict<any> = {};
 
@@ -224,16 +232,33 @@ export class Entity {
 
 	/* Body */
 
-	getOwnShapes(): Array<Shape> {
-		if ( this.isGhost ) return [];
-
+	protected _getDefaultShapes(): Array<Shape> {
 		let shape = Shape.makeRectangle( 
 				new Vec2( -this.width / 2, -this.height / 2), this.width, this.height );
 
 		shape.material = this.material;
-		shape.parent = this;
 
 		return [shape];
+	}
+
+	getOwnShapes(): Array<Shape> {
+		if ( this.isGhost ) return [];
+
+		let shapes = [];
+
+		if ( this.presetShapes.length > 0 ) {
+			shapes = this.presetShapes.map( x => x.copy() );
+
+		} else {
+			shapes = this._getDefaultShapes();
+		}
+
+		// do for either defaults or presets
+		for ( let shape of shapes ) {
+			shape.parent = this;
+		}
+
+		return shapes;
 	}
 
 	// don't override! override getOwnShapes instead
@@ -259,6 +284,14 @@ export class Entity {
 		return shapes;
 	}
 
+	replacePresetShapes( shapes: Array<Shape> ) {
+		for ( let shape of shapes ) {
+			this.unapplyTransformToShape( shape );
+		}
+
+		this.presetShapes = shapes;
+	}
+
 	getMinMax(): [Vec2, Vec2] {
 		let shapes = this.getShapes();
 		let corners: Array<Vec2> = [];
@@ -273,7 +306,7 @@ export class Entity {
 		return Shape.getMinMax( corners );
 	}
 
-	applyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+	applyTransform( p: LocalPoint, step: number=0.0, options: ApplyTransformOptions={} ): WorldPoint {
 		if ( p == this.pos ) {
 			throw new Error( 'Entity.applyTransform: Attempting to transform entity\'s own position' );
 		}
@@ -309,7 +342,17 @@ export class Entity {
 		return p;
 	}
 
-	unapplyTransform( p: Vec2, step: number=0.0, options: ApplyTransformOptions={} ): Vec2 {
+	unapplyTransformToShape( shape: Shape ) {
+		for ( let p of shape.points ) {
+			this.unapplyTransform( p, 0.0 );
+		}
+
+		for ( let n of shape.normals ) {
+			this.unapplyTransform( n, 0.0, { angleOnly: true } );
+		}
+	} 
+
+	unapplyTransform( p: WorldPoint, step: number=0.0, options: UnapplyTransformOptions={} ): LocalPoint {
 		if ( p == this.pos ) {
 			throw new Error( 'Entity.unapplyTransform: Attempting to transform entity\'s own position' );
 		}

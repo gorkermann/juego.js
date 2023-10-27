@@ -30,6 +30,14 @@ export class Vec2 {
 		return '(' + this.x + ', ' + this.y + ')';
 	}
 
+	static sortXY( a: Vec2, b: Vec2, epsilon: number=0.0001 ): number {
+		if ( Math.abs( a.x - b.x ) < epsilon ) {
+			return a.y - b.y;
+		} else {
+			return a.x - b.x;
+		}
+	}
+
 	static fromPolar( a: number, r: number ): Vec2 {
 		let v: Vec2 = new Vec2( 0, 0 );
 
@@ -52,6 +60,14 @@ export class Vec2 {
 		return Math.abs( this.x - v.x ) < epsilon &&
 			   Math.abs( this.y - v.y ) < epsilon;
 	}
+
+	equalsX( v: Vec2, epsilon: number=0.0001 ) {
+		return Math.abs( this.x - v.x ) < epsilon;
+	}
+
+	equalsY( v: Vec2, epsilon: number=0.0001 ) {
+		return Math.abs( this.y - v.y ) < epsilon;
+	}	
 
 	dot( v: Vec2 ): number {
 		return this.x * v.x + this.y * v.y;

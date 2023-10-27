@@ -270,6 +270,62 @@ function test_EntityCopy( tf: TestFuncs ) {
 	tf.ASSERT_EQ( copy.getSubs()[0].pos, e2.pos );
 }
 
+function test_replacePresetShapes( tf: TestFuncs ) {
+	let e = new Entity( new Vec2( 100, 100 ), 100, 10 );
+
+	let shapes = e.getOwnShapes();
+
+	tf.ASSERT_EQ( shapes.length, 1 );
+	tf.ASSERT_EQ( shapes[0].points.length, 4 );
+
+	let s = Shape.fromPoints( [new Vec2( 0, 0 ),
+						 	   new Vec2( 20, 0 ),
+						 	   new Vec2( 0, 20 )] );
+	let s2 = Shape.fromPoints( [new Vec2( 0, 0 ),
+						 	    new Vec2( -20, 0 ),
+						 	    new Vec2( -20, -20 ),
+						 	    new Vec2( 0, -20 )] );
+
+	e.presetShapes = [s, s2];
+
+	shapes = e.getOwnShapes();
+
+	tf.ASSERT_EQ( shapes.length, 2 );
+	tf.ASSERT( shapes[0] != s );
+	tf.ASSERT( shapes[1] != s2 );
+	tf.ASSERT_EQ( shapes[0].points.length, 3 );
+	tf.ASSERT_EQ( shapes[1].points.length, 4 );
+
+	shapes = e.getShapes();
+
+	tf.ASSERT_EQ( shapes[0].points, [new Vec2( 100, 100 ),
+						 	   		 new Vec2( 120, 100 ),
+						 	  		 new Vec2( 100, 120 )] );
+
+	shapes[0].points[0].add( new Vec2( 5, 5 ) );
+
+	// replacePresetShapes()
+	e.replacePresetShapes( shapes ); // calls unapplyTransformToShape()
+
+	tf.ASSERT_EQ( e.presetShapes.length, 2 );
+	tf.ASSERT( e.presetShapes[0] == shapes[0] );
+	tf.ASSERT( e.presetShapes[1] == shapes[1] );
+	tf.ASSERT_EQ( e.presetShapes[0].points.length, 3 );
+	tf.ASSERT_EQ( e.presetShapes[1].points.length, 4 );
+
+	// one of these points is shifted
+	tf.ASSERT_EQ( e.presetShapes[0].points, 
+					[new Vec2( 5, 5 ), // different
+					 new Vec2( 20, 0 ),
+					 new Vec2( 0, 20 )] );
+
+	tf.ASSERT_EQ( e.presetShapes[1].points, 
+					[new Vec2( 0, 0 ),
+					 new Vec2( -20, 0 ),
+					 new Vec2( -20, -20 ),
+					 new Vec2( 0, -20 )] );
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Entity',
@@ -307,5 +363,25 @@ tests.push( new Test( 'Entity',
 					  [],[] 
 					  ) ); 
 
+tests.push( new Test( 'Entity',
+					  test_replacePresetShapes,
+					  ['replacePresetShapes',
+					   'unapplyTransformToShape'],[]
+					  ) );
+
+tests.push( new Test( 'IsoTriangleEntity',
+					  ( tf: TestFuncs ) => tf.ASSERT( true ),
+					  [], ['constructor',
+					   '_getDefaultShapes'] ) );
+
+tests.push( new Test( 'RightTriangleEntity',
+					  ( tf: TestFuncs ) => tf.ASSERT( true ),
+					  [], ['constructor',
+					   '_getDefaultShapes'] ) );
+
+tests.push( new Test( 'OvalEntity',
+					  ( tf: TestFuncs ) => tf.ASSERT( true ),
+					  [], ['constructor',
+					   '_getDefaultShapes'] ) );
 
 export default tests;

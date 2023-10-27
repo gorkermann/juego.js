@@ -50,12 +50,19 @@ function test_Shape( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.normals[2], new Vec2( 0, 1 ) );
 	tf.ASSERT_EQ( s.normals[3], new Vec2( -1, 0 ) );
 
+	let e = new Entity( new Vec2(), 10, 10 );
+	s.parent = e;
+	s.hollow = true;
+
 	let s2 = s.copy();
 	for ( let i = 0; i < s2.edges.length; i++ ) {
 		tf.ASSERT_EQ( s2.points[i], s.points[i] );
 		tf.ASSERT_NEQ( s2.points[i], s.points[i], { shallow: true } );
 		tf.ASSERT_NEQ( s2.edges[i], s.edges[i], { shallow: true } );
 	}
+
+	tf.ASSERT_EQ( s2.parent, e );
+	tf.ASSERT_EQ( s2.hollow, s.hollow );
 
 	// reverse point order and try again
 	s = Shape.fromPoints( p.reverse() );
@@ -139,7 +146,7 @@ function test_Shape( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( s.getVel( new Vec2( 0, 0 ) ), new Vec2( 0, 0 ) ); // parent is null, no velocity
 
-	let e = new Entity( new Vec2( 0, 0 ), 100, 10 );
+	e = new Entity( new Vec2( 0, 0 ), 100, 10 );
 	e.vel = new Vec2( 1, 2 );
 	s.parent = e;
 
@@ -191,25 +198,6 @@ function test_Shape( tf: TestFuncs ) {
 		tf.ASSERT_EQ( s.getArea(), 100 );
 	}
 }
-
-let tests: Array<Test> = [];
-
-tests.push( new Test( 'Shape',
-					  test_Shape,
-					  ['constructor',
-					   'copy',
-					   'fromPoints',
-					   'makeRectangle',
-					   'makeCircle',
-					   'offset',
-					   'intersect',
-					   'rayIntersect',
-					   'getVel',
-					   'getArea'],
-					  ['stroke',
-					   'fill',
-					   'materialDraw'] ) );
-
 
 function test_ShapeSlice( tf: TestFuncs ) {
 
@@ -288,11 +276,6 @@ function test_ShapeSlice( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s.slice( l ), 0.8 ); // flipped
 }
 
-tests.push( new Test( 'Shape',
-					  test_ShapeSlice,
-					  ['slice'], 
-					  [] ) );
-
 function test_ShapeContains( tf: TestFuncs ) {
 	let s = Shape.makeRectangle( new Vec2( -5, 0 ), 10, 40 );
 
@@ -358,13 +341,6 @@ function test_ShapeContains( tf: TestFuncs ) {
 	}
 }
 
-tests.push( new Test( 'Shape',
-					  test_ShapeContains,
-					  ['getMinMax',
-					   'contains',
-					   'vertIntersectCount'], 
-					  [] ) );
-
 function test_getBodyContact( tf: TestFuncs ) {
     let e = new Entity( new Vec2( 50, 50 ), 100, 100 );
     let s = e.getOwnShapes()[0];
@@ -381,7 +357,7 @@ function test_getBodyContact( tf: TestFuncs ) {
     tf.ASSERT_EQ( s4.getBodyContact( s ), null );
 
     let e5 = new Entity( new Vec2( 50, 50 ), 10, 10 );
-    let s5 = e5.getOwnShapes(  )[0];
+    let s5 = e5.getOwnShapes()[0];
 
     let contact = s.getBodyContact( s5 );
     tf.ASSERT( contact !== null );
@@ -404,6 +380,129 @@ function test_getBodyContact( tf: TestFuncs ) {
     tf.ASSERT_EQ( contact.vel, new Vec2( 0, 0 ) );
     tf.ASSERT_EQ( contact.normal, new Vec2( 0, -1 )); // e5, which is moving down, hits e
 }
+
+function test_booleanOps( tf: TestFuncs ) {
+	// single shapes 
+	let s = Shape.makeRectangle( new Vec2( 0, 0 ), 100, 50 );
+	let s2 = Shape.makeRectangle( new Vec2( 10, 10 ), 100, 50 );
+
+	// union()
+	let union = Shape.union( [s], [s2] );
+
+	tf.ASSERT_EQ( union.length, 1 );
+	tf.ASSERT_EQ( union[0].points, [new Vec2( 0, 0 ), 
+							 new Vec2( 100, 0 ),
+							 new Vec2( 100, 10 ),
+							 new Vec2( 110, 10 ),
+							 new Vec2( 110, 60 ),
+							 new Vec2( 10, 60 ),
+							 new Vec2( 10, 50 ),
+							 new Vec2( 0, 50 ) ] );
+
+	s = Shape.makeRectangle( new Vec2( 0, 0 ), 100, 50 );
+	s2 = Shape.makeRectangle( new Vec2( 10, 10 ), 100, 50 );
+
+	// intersection()
+	let inter = Shape.intersection( [s], [s2] );
+
+	tf.ASSERT_EQ( inter.length, 1 );
+	tf.ASSERT_EQ( inter[0].points, [new Vec2( 10, 10 ), 
+							 new Vec2( 100, 10 ),
+							 new Vec2( 100, 50 ),
+							 new Vec2( 10, 50 ) ] );
+
+	s = Shape.makeRectangle( new Vec2( 0, 0 ), 100, 50 );
+	s2 = Shape.makeRectangle( new Vec2( 10, 10 ), 100, 50 );
+
+
+	// difference()
+	let diff = Shape.difference( [s], [s2] );
+
+	tf.ASSERT_EQ( diff.length, 1 );
+	tf.ASSERT_EQ( diff[0].points, [new Vec2( 0, 0 ), 
+							 new Vec2( 100, 0 ),
+							 new Vec2( 100, 10 ),
+							 new Vec2( 10, 10 ),
+							 new Vec2( 10, 50 ),
+							 new Vec2( 0, 50 ) ] );
+
+	// multiple shapes
+	s = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	s2 = Shape.makeRectangle( new Vec2( 5, 5 ), 10, 10 );
+	let s3 = Shape.makeRectangle( new Vec2( 0, 100 ), 10, 10 );
+	let s4 = Shape.makeRectangle( new Vec2( 5, 105 ), 10, 10 );
+
+	inter = Shape.intersection( [s, s2], [s3] ); // shapes in first multipoly overlap
+	tf.ASSERT_EQ( inter.length, 0 );		
+
+	inter = Shape.intersection( [s, s3], [s2, s4] );
+
+	tf.ASSERT_EQ( inter.length, 2 );
+	tf.ASSERT_EQ( inter[0].points, [new Vec2( 5, 5 ), 
+							 new Vec2( 10, 5 ),
+							 new Vec2( 10, 10 ),
+							 new Vec2( 5, 10 ) ] );
+	tf.ASSERT_EQ( inter[1].points, [new Vec2( 5, 105 ), 
+							 new Vec2( 10, 105 ),
+							 new Vec2( 10, 110 ),
+							 new Vec2( 5, 110 ) ] );
+
+	// materials
+	s = Shape.makeRectangle( new Vec2( 0, 0 ), 10, 10 );
+	s2 = Shape.makeRectangle( new Vec2( 5, 5 ), 10, 10 );
+	s.material = new Material( 45, 0, 0.5 );
+	s2.material = new Material( 90, 0, 0.5 );
+
+	union = Shape.union( [s], [s2] );
+
+	tf.ASSERT( union[0].material != s.material );
+	tf.ASSERT_EQ( union[0].material.hue, 45 );
+
+	s2 = Shape.makeRectangle( new Vec2( -5, -5 ), 20, 20 );
+	s2.material = new Material( 90, 0, 0.5 );
+
+	union = Shape.union( [s], [s2] );
+
+	tf.ASSERT( union[0].material != s.material );
+	tf.ASSERT_EQ( union[0].material.hue, 45 );
+}
+
+let tests: Array<Test> = [];
+
+tests.push( new Test( 'Shape',
+					  test_Shape,
+					  ['constructor',
+					   'copy',
+					   'fromPoints',
+					   'makeRectangle',
+					   'makeCircle',
+					   'offset',
+					   'intersect',
+					   'rayIntersect',
+					   'getVel',
+					   'getArea'],
+					  ['stroke',
+					   'fill',
+					   'materialDraw'] ) );
+
+tests.push( new Test( 'Shape',
+					  test_ShapeSlice,
+					  ['slice'], 
+					  [] ) );
+
+tests.push( new Test( 'Shape',
+					  test_ShapeContains,
+					  ['getMinMax',
+					   'contains',
+					   'vertIntersectCount'], 
+					  [] ) );
+
 tests.push(new Test('Shape', test_getBodyContact, ['getBodyContact'], []));
+
+tests.push(new Test('Shape', test_booleanOps,
+							['fromMultiPoly',
+							 'union',
+							 'intersection',
+							 'difference'], []));
 
 export default tests;

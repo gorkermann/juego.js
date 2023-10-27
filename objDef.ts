@@ -1,6 +1,7 @@
 import { addClass, constructors } from './constructors.js'
 
 import { Chrono, Anim, AnimField, AnimFrame, AnimTarget, PhysField } from './Anim.js'
+import { IsoTriangleEntity, RightTriangleEntity, OvalEntity } from './BasicEntity.js'
 import { Camera } from './Camera.js'
 import { Entity } from './Entity.js'
 import { GridArea } from './GridArea.js'
@@ -28,6 +29,9 @@ addClass( 'PhysField', PhysField );
 addClass( 'Sound', Sound );
 addClass( 'Camera', Camera );
 addClass( 'AnimTarget', AnimTarget );
+addClass( 'IsoTriangleEntity', IsoTriangleEntity );
+addClass( 'RightTriangleEntity', RightTriangleEntity );
+addClass( 'OvalEntity', OvalEntity );
 
 // define special constructors here
 // constructors[className] =  () => new Class( false );

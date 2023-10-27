@@ -13,7 +13,8 @@
   "license": "ISC",
   "dependencies": {
     "md5": "^2.3.0",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "polyclip-ts": "^0.16.3"
   },
   "type": "module",
   "devDependencies": {

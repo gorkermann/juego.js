@@ -234,6 +234,14 @@ export class Line {
 		}
 	}
 
+	sortAlongFunc( a: Vec2, b: Vec2 ): number {
+		if ( Math.abs( this.p2.x - this.p1.x ) < 0.01 ) {
+			return ( a.y - b.y ) / ( this.p2.y - this.p1.y );
+		} else {
+			return ( a.x - b.x ) / ( this.p2.x - this.p1.x );
+		}	
+	}
+
 	draw( context: CanvasRenderingContext2D ): void {
 		context.beginPath();
 		context.moveTo( this.p1.x, this.p1.y );	
