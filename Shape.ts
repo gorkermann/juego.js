@@ -545,19 +545,35 @@ export class Shape {
 		// get component of velocity parallel to normal
 		// use that as magnitude of contact velocity
 		let nvel = normal.times( vel.dot( normal ) );
+		let ovel = new Vec2();
+
+		if ( this.parent ) {
+			let selfPush = this.getVel( point ).minus( this.parent.getRoot().vel );
+			selfPush.flip();
+		
+			let dot = selfPush.dot( normal );
+
+			if ( dot > 0 ) {
+				let push = normal.times( dot );
+
+				nvel.add( push ); // no friction
+				ovel.add( selfPush.minus( push ) );
+			} else {
+				//ovel.add( selfPush );
+			}
+		}
 
 		// create contact
-		contact = new Contact( null, null,
-							   point,
-							   normal );
+		contact = new Contact( null, null, point, normal );
 		contact.vel = nvel;
+		contact.ovel = ovel
 		contact.slice = slice;
 		
 		if ( Debug.CONTACT_INTERS ) {
 			contact.inters = inters.map( x => x.point );
 		}
 
-		return contact;		
+		return contact;
 	}
 
 	getVel( point: Vec2, step: number=1.0 ): Vec2 {
@@ -777,7 +793,7 @@ export class Shape {
 		return Shape.doBool( 'difference', shapes1, shapes2 );
 	}
 
-	/* drawing methods */
+	/* drawing */
 
 	sphericalStroke( context: CanvasRenderingContext2D, origin: Vec2, ir: number, lens: number ): void {
 		context.lineWidth = 1;

@@ -12,12 +12,13 @@ import * as tp from './lib/toastpoint.js'
 import { constructors, nameMap } from './constructors.js'
 
 import { Anim } from './Anim.js'
-import { rangeEdit, Range } from './Editable.js'
-import { Vec2 } from './Vec2.js'
-import { Line } from './Line.js'
-import { Material } from './Material.js'
 import { Contact } from './Contact.js'
 import { Debug } from './Debug.js'
+import { rangeEdit, Range } from './Editable.js'
+import { Line } from './Line.js'
+import { Material } from './Material.js'
+import { Vec2 } from './Vec2.js'
+import { toToast } from './serialization.js'
 import { Shape, LocalPoint, WorldPoint } from './Shape.js'
 import { Dict } from './util.js'
 
@@ -60,35 +61,40 @@ export class Entity {
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
 
-	// relative to parent if parent set (position is applied before rotation)
-	pos: Vec2 = new Vec2();
-	vel: Vec2 = new Vec2();
-	angle: number = 0.0;
-	angleVel: number = 0.0;	
+	pos: Vec2 = new Vec2(); // position relative to parent
+	vel: Vec2 = new Vec2(); // added to pos in advance()
+	angle: number = 0.0;	// if transformOrder=TRANSLATE_THEN_ROTATE, angle relative to parent
+							// if transformOrder=ROTATE_THEN_TRANSLATE, own angle 
+	angleVel: number = 0.0;	// added to angle in advance()
 
-	noAdvance: boolean = false; // don't update position internally
-	transformOrder: TransformOrder = TransformOrder.TRANSLATE_THEN_ROTATE;
+	noAdvance: boolean = false; // if true, pos and angle will not be update in advance()
+	transformOrder: TransformOrder = TransformOrder.TRANSLATE_THEN_ROTATE; // see "angle" above
 
-	// Dimensions	
-	width: number;
-	height: number;
+	// Appearance	
+	width: number;	// default width (diameter for a circular entity)
+	height: number;	// default height
 
-	presetShapes: Array<Shape> = [];
+	material: Material = new Material( 0, 0, 0.5 ); // default color
 
-	isGhost: boolean = false; // don't generate shapes for ghosts (don't draw or collide)
-	collisionGroup: number = 0; 
+	presetShapes: Array<Shape> = []; // overrides return value of this._getDefaultShapes()
 
-	// Entity accepts collisions from these groups
-	// only set for "intelligent" entities that handle collisions
-	collisionMask: number = 0x00; 
-	isPliant: boolean = false;
+	// Collision
+	isGhost: boolean = false;		// if true, this entity doesn't generate shapes (no draw or collide, subs still can)
+	collisionGroup: number = 0;		// arbitrary power of 2
+	collisionMask: number = 0x00; 	// Entity handles collisions from these groups
+	isPliant: boolean = false;		// Entity can be pushed
 
-	material: Material = new Material( 0, 0, 0.5 );
+	removeThis: boolean = false;	// if true, tells the entity manager to remove this entity. Set by calling destructor()
 
-	removeThis: boolean = false;	// Removal flag. Entities with this flag set will be removed from the game
+	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game
 
-	spawned: Array<Entity> = []; // Queue of entities created by this one that will be added to the game 
-								 // Bullets are a common example
+	drawWireframe: boolean = false;
+
+	name: string = 'entity';
+	flavorName: string = 'ENTITY';
+	className: string = 'Entity';
+
+	anim: Anim = null;
 
 	/* fields from Selectable */
 
@@ -105,14 +111,6 @@ export class Entity {
 	};
 
 	savedVals: Dict<any> = {};
-
-	drawWireframe: boolean = false;
-
-	name: string = 'entity';
-	flavorName: string = 'ENTITY';
-	className: string = 'Entity';
-
-	anim: Anim = null;
 
 	discardFields: Array<string> = [
 		'hovered', 'selected', 'preselected',
@@ -136,19 +134,7 @@ export class Entity {
 	init() {}
 
 	toToast( toaster: tp.Toaster ): any {
-		let fields = Object.keys( this );
-
-		// never save these fields (which are lists of other fields)
-		let exclude = ['editFields', 'saveFields', 'discardFields'];
-
-		exclude = exclude.concat( this.discardFields );
-		fields = fields.filter( x => !exclude.includes( x ) );		
-
-		let flat: any = {};
-
-		tp.setMultiJSON( flat, fields, this, toaster );
-
-		return flat;
+		return toToast.apply( this, [toaster] );
 	}
 
 	/**
@@ -169,7 +155,6 @@ export class Entity {
 		tp.resolveList( [copy], toaster );
 
 		copy.parent = null;
-		// material can be either an internal or external pointer
 
 		return copy;
 	}
@@ -185,21 +170,14 @@ export class Entity {
 	// don't call except as super._subDestructor() inside an override
 	protected _subDestructor() {}
 
-	cull() {
-		for ( let sub of this.getSubs() ) {
-			sub.cull();
-		}
-
-		cullList( this._subs );
-	}
-
-	/* Update */
+	/* update */
 
 	advance( step: number ) {
 		if ( !this.noAdvance ) {
 			this.pos.add( this.vel.times( step ) );
-			this.angle += this.angleVel * step;
 		}
+		
+		this.angle += this.angleVel * step;
 
 		for ( let sub of this.getSubs() ) {
 			sub.advance( step );
@@ -230,7 +208,7 @@ export class Entity {
 		}
 	}
 
-	/* Body */
+	/* body */
 
 	protected _getDefaultShapes(): Array<Shape> {
 		let shape = Shape.makeRectangle( 
@@ -388,7 +366,15 @@ export class Entity {
 		return p;
 	}
 
- 	/* Tree */
+ 	/* childrem */
+
+	cull() {
+		for ( let sub of this.getSubs() ) {
+			sub.cull();
+		}
+
+		cullList( this._subs );
+	}
 
 	addSub( entity: Entity ) {
 		if ( entity.parent ) {
@@ -441,7 +427,7 @@ export class Entity {
 		return result;
 	}
 
-	/* Interaction */
+	/* interaction */
 
 	watch( pos: Vec2 ): void {}
 
@@ -511,7 +497,7 @@ export class Entity {
 
 	hitWith( otherEntity: Entity, contact: Contact ): void {}
 
-	/* Editor */
+	/* editor */
 
 	hover( p: Vec2 ): Array<Entity> { 
 		let output = [];
@@ -572,7 +558,7 @@ export class Entity {
 		delete this.savedVals['pos'];
 	}
 
-	/* Graphical */ 
+	/* drawing */ 
 
 	shade() {
 		for ( let sub of this.getSubs() ) {

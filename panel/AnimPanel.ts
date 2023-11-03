@@ -130,10 +130,10 @@ export class AnimPanel extends Field {
 		this.updateControl();
 	}
 
-	calcHash(): string {
+	private calcHash(): string {
 		let prehash = '';
 
-		let threads = this.getAnimThreads();
+		let threads = this.getDisplayThreads();
 
 		for ( let thread of threads ) {
 			for ( let frame of thread ) {
@@ -153,7 +153,7 @@ export class AnimPanel extends Field {
 		return md5( prehash );
 	}
 
-	calcControlHash(): string {
+	private calcControlHash(): string {
 		let prehash = '';
 
 		for ( let sequenceKey in this.anim.sequences ) {
@@ -167,7 +167,7 @@ export class AnimPanel extends Field {
 		return md5( prehash );
 	}
 
-	createFieldCell( key: string, field: AnimField, inRow: HTMLTableRowElement ) {
+	private createFieldCell( key: string, field: AnimField, inRow: HTMLTableRowElement ) {
 		let nameCell = create( 'td', {}, inRow ) as HTMLTableColElement;
 		nameCell.innerHTML = key;
 		nameCell.classList.add( 'anim-field-cell' );
@@ -189,9 +189,10 @@ export class AnimPanel extends Field {
 		}
 	}
 
-	setFromThread( anim: Anim, thread: Array<AnimFrame>, frameIndex: number=-1 ) {
+	private setFromThread( anim: Anim, thread: Array<AnimFrame>, frameIndex: number=-1 ) {
 		let touched: Dict<boolean> = {};
 
+		if ( thread.length == 0 ) return;
 		if ( frameIndex < 0 ) frameIndex = thread.length - 1;
 
 		for ( let i = frameIndex; i < thread.length; i++ ) {
@@ -205,7 +206,7 @@ export class AnimPanel extends Field {
 		}
 	}
 
-	createFrameCell( frame: AnimFrame, inRow: HTMLTableRowElement, frameIndex: number ): HTMLTableColElement {
+	private createFrameCell( frame: AnimFrame, inRow: HTMLTableRowElement, frameIndex: number ): HTMLTableColElement {
 		let cell = create( 'td', {}, inRow ) as HTMLTableColElement;
 
 		cell.onmouseup = () => {
@@ -244,7 +245,7 @@ export class AnimPanel extends Field {
 		return cell;
 	}
 
-	createTargetCell( fieldKey: string, layeredFrames: Array<AnimFrame>, inRow: HTMLTableRowElement ): HTMLTableColElement {
+	private createTargetCell( fieldKey: string, layeredFrames: Array<AnimFrame>, inRow: HTMLTableRowElement ): HTMLTableColElement {
 		let cell = create( 'td', {}, inRow ) as HTMLTableColElement;
 
 		for ( let i = 0; i < layeredFrames.length; i++ ) {
@@ -281,14 +282,6 @@ export class AnimPanel extends Field {
 		return cell;
 	}
 
-	getAnimThreads() {
-		if ( this.selectedSequenceKey ) {
-			return [this.anim.getThread( this.selectedSequenceKey )];
-		} else {
-			return this.anim.threads;
-		}
-	}
-
 	updateControl(): boolean {
 		let animHash = this.calcHash();
 		let id = this.linkedObjs[0].id;
@@ -297,79 +290,7 @@ export class AnimPanel extends Field {
 		this.animHash = animHash;
 
 		if ( updateDom ) {
-			let threads: Array<Array<AnimFrame>> = this.getAnimThreads();
-
-			let maxThreadLength = 0;
-			threads.map( x => {
-				if ( x.length > maxThreadLength ) maxThreadLength = x.length;
-			} );
-
-			// copy object
-			this.helperEntities = [];
-
-			if ( this.linkedObjs[0] instanceof Entity ) {
-				let copy = this.linkedObjs[0].copy();
-
-				this.setFromThread( copy.anim, this.anim.getThread( this.selectedSequenceKey ) );
-				copy.drawWireframe = true;
-
-				this.helperEntities.push( copy );
-			}
-
-			// container
-			clear( this.frameDom );
-
-			let table = create( 'table', { className: 'anim-table' } ) as HTMLTableElement;
-			if ( this.selectedSequenceKey ) table.classList.add( 'sequence' );
-
-			// column styling
-			let colgroup = create( 'colgroup', {}, table );
-
-			create( 'col', { className: 'anim-field-col' }, colgroup );
-			for ( let i = 0; i < maxThreadLength; i++ ) {
-				create( 'col', { className: 'anim-frame-col' }, colgroup ); 
-			}
-
-			let tbody = create( 'tbody', {}, table );
-
-
-			// top row
-			let firstRow = create( 'tr' ) as HTMLTableRowElement;
-			create( 'td', { style: 'height: 20px' }, firstRow );
-
-			for ( let i = 0; i < threads[this.selectedThreadIndex].length; i++ ) {
-				let cell = this.createFrameCell( threads[this.selectedThreadIndex][i], firstRow, i );
-
-				if ( i == this.selectedFrameIndex ) cell.classList.add( 'selected' );
-			}
-			tbody.appendChild( firstRow );
-
-			// target rows
-			for ( let key in this.anim.fields ) {
-				let row = create( 'tr' ) as HTMLTableRowElement;
-
-				this.createFieldCell( key, this.anim.fields[key], row );
-
-				for ( let i = 0; i < maxThreadLength; i++ ) {
-					let layeredFrames = []; 
-
-					for ( let thread of threads ) {
-						if ( i < thread.length ) {
-							layeredFrames.push( thread[i] );
-						} else {
-							layeredFrames.push( null );
-						}
-					}
-
-					let cell = this.createTargetCell( key, layeredFrames, row );
-				}
-
-				tbody.appendChild( row );
-			}
-
-			this.frameDom.appendChild( table );
-
-			this.lastUpdateTime = new Date().getTime();
+			this.updateFrameDisplayDom();
 		}
 
 		let controlHash = this.calcControlHash();
@@ -377,7 +298,6 @@ export class AnimPanel extends Field {
 		this.controlHash = controlHash;
 
 		if ( updateControls ) {
-
 			clear( this.controlDom );
 
 			// Add Frame
@@ -445,5 +365,90 @@ export class AnimPanel extends Field {
 		}
 
 		return true;
+	}
+
+	private updateFrameDisplayDom() {
+
+		// container
+		clear( this.frameDom );
+
+		let threads: Array<Array<AnimFrame>> = this.getDisplayThreads();
+		if ( threads.length == 0 ) return;
+
+		let maxThreadLength = 0;
+		threads.map( x => {
+			if ( x.length > maxThreadLength ) maxThreadLength = x.length;
+		} );
+
+		// copy object
+		this.helperEntities = [];
+
+		if ( this.linkedObjs[0] instanceof Entity ) {
+			let copy = this.linkedObjs[0].copy();
+
+			this.setFromThread( copy.anim, this.anim.getThread( this.selectedSequenceKey ) );
+			copy.drawWireframe = true;
+
+			this.helperEntities.push( copy );
+		}
+
+		let table = create( 'table', { className: 'anim-table' } ) as HTMLTableElement;
+		if ( this.selectedSequenceKey ) table.classList.add( 'sequence' );
+
+		// column styling
+		let colgroup = create( 'colgroup', {}, table );
+
+		create( 'col', { className: 'anim-field-col' }, colgroup );
+		for ( let i = 0; i < maxThreadLength; i++ ) {
+			create( 'col', { className: 'anim-frame-col' }, colgroup ); 
+		}
+
+		let tbody = create( 'tbody', {}, table );
+
+		// top row
+		let firstRow = create( 'tr' ) as HTMLTableRowElement;
+		create( 'td', { style: 'height: 20px' }, firstRow );
+
+		for ( let i = 0; i < threads[this.selectedThreadIndex].length; i++ ) {
+			let cell = this.createFrameCell( threads[this.selectedThreadIndex][i], firstRow, i );
+
+			if ( i == this.selectedFrameIndex ) cell.classList.add( 'selected' );
+		}
+		tbody.appendChild( firstRow );
+
+		// target rows
+		for ( let key in this.anim.fields ) {
+			let row = create( 'tr' ) as HTMLTableRowElement;
+
+			this.createFieldCell( key, this.anim.fields[key], row );
+
+			for ( let i = 0; i < maxThreadLength; i++ ) {
+				let layeredFrames = []; 
+
+				for ( let thread of threads ) {
+					if ( i < thread.length ) {
+						layeredFrames.push( thread[i] );
+					} else {
+						layeredFrames.push( null );
+					}
+				}
+
+				let cell = this.createTargetCell( key, layeredFrames, row );
+			}
+
+			tbody.appendChild( row );
+		}
+
+		this.frameDom.appendChild( table );
+
+		this.lastUpdateTime = new Date().getTime();
+	}
+
+	private getDisplayThreads() {
+		if ( this.selectedSequenceKey ) {
+			return [this.anim.getThread( this.selectedSequenceKey )];
+		} else {
+			return this.anim.threads;
+		}
 	}
 }

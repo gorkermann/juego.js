@@ -1,6 +1,9 @@
+import * as tp from '../lib/toastpoint.js'
+import { constructors, nameMap } from '../constructors.js'
+
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
-import { Anim, AnimFrame, AnimField, AnimTarget, PhysField } from '../Anim.js'
+import { Anim, AnimFrame, AnimField, AnimTarget, PhysField, Expiration } from '../Anim.js'
 import { Vec2 } from '../Vec2.js'
 
 function test_Anim( tf: TestFuncs ) {
@@ -398,6 +401,8 @@ function test_freeFields( tf: TestFuncs ) {
 }
 */
 
+/* removed feature, not running */
+/*
 function test_readOnlyTargets( tf: TestFuncs ) {
 	let obj = {
 		x: 0,
@@ -434,7 +439,7 @@ function test_readOnlyTargets( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( obj.x, 3 ); // both values begin to fall 
 	tf.ASSERT_EQ( obj.y, 1 ); // 
-}
+}*/
 
 /* removed feature, not running */
 function test_targetObjs( tf: TestFuncs ) {
@@ -798,7 +803,9 @@ function test_threads( tf: TestFuncs ) {
 		'y': { value: -2 },
 	} ) );
 
-	tf.ASSERT_EQ( anim.isDone(), true );
+	tf.ASSERT( anim.isDone() );
+	tf.THROWS( () => anim.isDone( [-1] ) ); // out of range
+	tf.ASSERT( anim.isDone( [1] ) ); // nonexistent threads are done 
 
 	anim.pushFrame( new AnimFrame( {
 		'x': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored
@@ -851,6 +858,96 @@ function test_threads( tf: TestFuncs ) {
 	tf.ASSERT_EQ( obj.y, 2 ); // new default is 2
 }
 
+function test_overrideDelta( tf: TestFuncs ) {
+
+	// no rates
+	let obj: any = {
+		x: 0,
+		y: new Vec2( 0, 0 )
+	}	
+
+	let anim = new Anim( {
+		'x': new AnimField( obj, 'x', 2 ),
+		'y': new AnimField( obj, 'y', 2 )
+	} );
+
+	anim.pushFrame( new AnimFrame( {
+		'x': { value: 1, overrideDelta: true, expireOnCount: 10 },
+		'y': { value: new Vec2( 1, 1 ), overrideDelta: true },
+	} ) );
+
+	anim.update( 4.0, 1 );
+
+	tf.ASSERT_EQ( obj.x, 4 ); // if overrideDelta were not set this would be 1
+	tf.ASSERT_EQ( obj.y, new Vec2( 4, 4 ) ); // if overrideDelta were not set this would be (1, 1)
+
+	// PhysFields
+	obj = {
+		x: 0,
+		dx: 0,
+		y: new Vec2( 0, 0 ),
+		dy: new Vec2( 0, 0 )
+	}	
+
+	anim = new Anim( {
+		'x': new PhysField( obj, 'x', 'dx', 2 ),
+		'y': new PhysField( obj, 'y', 'dy', 2 )
+	} );
+	
+	anim.pushFrame( new AnimFrame( {
+		'x': { value: 1, overrideDelta: true, expireOnCount: 10 },
+		'y': { value: new Vec2( 1, 1 ), overrideDelta: true },
+	} ) );
+
+	anim.update( 4.0, 1 );
+
+	tf.ASSERT_EQ( obj.x, 0 ); // advance() was never called
+	tf.ASSERT_EQ( obj.dx, 4 ); // if overrideDelta were not set this would be 1
+	tf.ASSERT_EQ( obj.y, new Vec2( 0, 0 ) ); // advance() was never called
+	tf.ASSERT_EQ( obj.dy, new Vec2( 4, 4 ) ); // if overrideDelta were not set this would be (1, 1)
+}
+
+function test_AnimTarget( tf: TestFuncs ) {
+	// constructor()
+	let target = new AnimTarget( 0, { expireOnCount: 10 } );
+
+	tf.ASSERT_EQ( target.expiration, Expiration.expireOnCount );
+	tf.ASSERT_EQ( target.count, 10 );
+
+	// updateCount()
+	target.updateCount( 1 );
+
+	tf.ASSERT_EQ( target.count, 9 );
+}
+
+function shake_AnimTarget( tf: TestFuncs ) {
+	let target = new AnimTarget( 0 );
+
+	tf.ASSERT( target.copy() !== null );
+
+	let toaster = new tp.Toaster( constructors, nameMap );
+	tf.ASSERT( target.toToast( toaster ) !== null );	
+}
+
+function shake_AnimField( tf: TestFuncs ) {
+	let field = new AnimField( { a: 0 }, 'a' );
+
+	field.edit( 'rate', 1 );
+	tf.ASSERT_EQ( field.rate, 1 );
+
+	let toaster = new tp.Toaster( constructors, nameMap );
+	tf.ASSERT( field.toToast( toaster ) !== null );
+}
+
+function shake_AnimFrame( tf: TestFuncs ) {
+	let frame = new AnimFrame( {} );
+
+	frame.edit( 'delay', 1 );
+
+	let toaster = new tp.Toaster( constructors, nameMap );
+	tf.ASSERT( frame.toToast( toaster ) !== null );
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Anim',
@@ -883,7 +980,6 @@ tests.push( new Test( 'PhysField',
 
 tests.push( new Test( 'Anim',
 					  test_reachOnCount,
-					  [],
 					  [] ) );
 
 /*tests.push( new Test( 'Anim',
@@ -891,10 +987,9 @@ tests.push( new Test( 'Anim',
 					  ['blockFields'],
 					  [] ) );*/
 
-tests.push( new Test( 'Anim',
+/*tests.push( new Test( 'Anim',
 					  test_readOnlyTargets,
-					  [],
-					  [] ) );
+					  [] ) );*/
 
 tests.push( new Test( 'Anim',
 					  test_AnimFunc,
@@ -903,24 +998,20 @@ tests.push( new Test( 'Anim',
 
 tests.push( new Test( 'PhysField',
 					  test_angleField,
-					  [],
 					  [] ) );
 
 tests.push( new Test( 'Anim',
 					  test_fieldGroup,
-					  ['addGroup'],
-					  [] ) );
+					  ['addGroup'] ) );
 
 tests.push( new Test( 'Anim',
 					  test_clear,
 					  ['clear',
 					   'clearAllThreads',
-					   'clearByTag'],
-					  [] ) );
+					   'clearByTag'] ) );
 
 tests.push( new Test( 'Anim',
 					  test_frameDelay,
-					  [],
 					  [] ) );
 
 tests.push( new Test( 'Anim',
@@ -929,7 +1020,22 @@ tests.push( new Test( 'Anim',
 					   'update',
 					   'updateThread',
 					   'completeFrame', // defaults set correctly
-					   'isDone'],
+					   'isDone'] ) );
+
+tests.push( new Test( 'Anim',
+					  test_overrideDelta,
 					  [] ) );
+
+tests.push( new Test( 'AnimTarget',
+					  shake_AnimTarget,
+					  ['copy', 'toToast'] ) );
+
+tests.push( new Test( 'AnimField',
+					  shake_AnimField,
+					  ['edit', 'toToast'] ) );
+
+tests.push( new Test( 'AnimFrame',
+					  shake_AnimFrame,
+					  ['edit', 'toToast'] ) );
 
 export default tests;

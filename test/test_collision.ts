@@ -1,6 +1,7 @@
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
 import { solveCollisionsFor } from '../collisionSolver.js'
+import { Contact } from '../Contact.js'
 import { Entity } from '../Entity.js'
 import { Line } from '../Line.js'
 import { Material } from '../Material.js'
@@ -8,7 +9,14 @@ import { RayHit } from '../RayHit.js'
 import { Shape } from '../Shape.js'
 import { Vec2 } from '../Vec2.js'
 
-let tests: Array<Test> = [];
+function shake_Contact( tf: TestFuncs ) {
+	let e = new Entity( new Vec2( 0, 0 ), 0, 0 );
+	let e2 = new Entity( new Vec2( 0, 0 ), 0, 0 );
+
+	new Contact( e, e2, null, new Vec2( 1, 0 ) );
+	tf.THROWS( () => new Contact( e, e2, new Vec2( 0, 0 ), null ) );
+	new Contact( e, e2, new Vec2( 0, 0 ), new Vec2( 2, 0 ) ); // normal too long
+}
 
 function test_crush( tf: TestFuncs ) {
 	let floor = new Entity( new Vec2( 50, 10 ), 100, 20 );
@@ -180,9 +188,14 @@ function test_crush( tf: TestFuncs ) {
 	tf.ASSERT_EQ( result.crushed, true );
 }
 
+let tests: Array<Test> = [];
+
+tests.push( new Test( 'Contact.function',
+					  shake_Contact,
+					  ['Contact'] ) );
+
 tests.push( new Test( 'Entity',
 					  test_crush,
-					  [], 
 					  [] ) );
 
 export default tests;

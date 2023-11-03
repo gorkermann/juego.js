@@ -24,6 +24,10 @@ function solverDirCompare( dir1: Contact, dir2: Contact ) {
 	return dir1.normal.equals( dir2.normal );
 }
 
+function pullDirCompare( dir1: Contact, dir2: Contact ) {
+	return dir1.sub === dir2.sub;
+}
+
 export type SolverResult = {
 	blockedDirs: Array<Vec2>,
 	crushed: boolean,
@@ -37,6 +41,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let shapes = [];
 	let blockedDirs: Array<Contact> = [];
 	let pushDirs: Array<Contact> = [];
+	let pullDirs: Array<Contact> = [];
 
 	let minPartialStep = 0.05;
 
@@ -74,6 +79,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 
 			if ( solidContacts.length > 0) {
 				partialStep /= 2;
+				babyStep = true; // if there is contact on this partial step, there will likely be on the next, so start small
 			} else {
 				break;
 			}
@@ -129,6 +135,17 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				// potential crush directions
 				pushUnique( contact, pushDirs, solverDirCompare );
 			}
+
+			/* player pulls self */
+			/*if ( contact.ovel.lengthSq() > 0 ) {
+				let dir = pullDirs.find( x => x.sub == contact.sub );
+				if ( !dir ) {
+					contact.ovel.scale( step - stepTotal );
+					entity.vel.add( contact.ovel );
+
+					pushUnique( contact, pullDirs, pullDirCompare );
+				}
+			}*/
 		}
 
 		stepTotal += partialStep;

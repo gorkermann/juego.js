@@ -133,7 +133,7 @@ export class Vec2 {
 	}
 
 	flip(): Vec2 {
-		return this.scale(-1);
+		return this.scale( -1 );
 	}
 
 	length(): number {

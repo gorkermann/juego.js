@@ -132,7 +132,7 @@ function reportCoverage( coverage: Dict<Dict<string>> ) {
 	}
 }
 
-let dirs = ['.'];
+let dirs = ['.', './panel', './mode'];
 
 let defaultModules: Array<string> = [
 	'./test_Vec2.js',
@@ -143,7 +143,8 @@ let defaultModules: Array<string> = [
 	'./test_collision.js',
 	'./test_Angle.js',
 	'./test_Field.js',
-	'./test_Inspector.js'
+	'./ignore_classes.js',
+	'./test_Mock.js'
 ]
 
 /*

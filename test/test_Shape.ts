@@ -662,14 +662,10 @@ tests.push( new Test( 'Shape',
 					   'fromPoints',
 					   'makeRectangle',
 					   'makeCircle',
-					   'offset',
 					   'intersect',
 					   'rayIntersect',
 					   'getVel',
-					   'getArea'],
-					  ['stroke',
-					   'fill',
-					   'materialDraw'] ) );
+					   'getArea'] ) );
 
 tests.push( new Test( 'Shape',
 					  test_ShapeSlice,

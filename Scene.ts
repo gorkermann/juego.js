@@ -1,6 +1,5 @@
 import { Camera } from './Camera.js'
 import { EntityManager } from './EntityManager.js'
-import { ScrollBox } from './ScrollBox.js'
 import { Vec2 } from './Vec2.js'
 
 ///////////

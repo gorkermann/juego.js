@@ -2,7 +2,7 @@
 // SCROLLBOX //
 ///////////////
 
-import { capIndex } from "./util.js"
+import { capIndex } from "../util.js"
 
 /*
 	Handles the scrolling window of tiles the player sees as the level progresses. 

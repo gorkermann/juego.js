@@ -2,28 +2,13 @@ import * as tp from './lib/toastpoint.js'
 
 import { Angle } from './Angle.js'
 import { Range, rangeEdit } from './Editable.js'
+import { toToast } from './serialization.js'
 import { Vec2 } from './Vec2.js'
 import { Dict } from './util.js'
 
 import { Debug } from './Debug.js'
 
 export type MilliCountdown = number;
-
-function toToast( this: any, toaster: tp.Toaster ): any {
-	let fields = Object.keys( this );
-
-	// never save these fields (which are lists of other fields)
-	let exclude = ['editFields', 'saveFields', 'discardFields'];
-
-	exclude = exclude.concat( this.discardFields );
-	fields = fields.filter( x => !exclude.includes( x ) );		
-
-	let flat: any = {};
-
-	tp.setMultiJSON( flat, fields, this, toaster );
-
-	return flat;
-}
 
 export class Chrono {
 	count: MilliCountdown;
@@ -54,7 +39,8 @@ type AnimFunc = {
 	caller: any;
 	funcName: string;
 	args?: Array<any>
-	
+	eachUpdate?: boolean;
+
 	_hasBeenRun?: boolean;
 }
 
@@ -69,20 +55,20 @@ type AnimTargetOptions = {
 	expireOnReach?: boolean;
 	reachOnCount?: MilliCountdown;
 
-	readOnly?: boolean;
-
 	setDefault?: boolean;
 
 	overrideRate?: number;
 	derivNo?: number;
 
 	isSpin?: boolean;
-	spinDir?: SpinDir
+	spinDir?: SpinDir;
+
+	overrideDelta?: boolean;
 }
 
 type SimpleAnimTarget = { value: AnimValue } & AnimTargetOptions;
 
-enum Expiration {
+export enum Expiration { // test only export
 	none = 0,
 	expireOnReach,
 	expireOnCount,
@@ -97,8 +83,6 @@ export class AnimTarget {
 	count: MilliCountdown = 0;
 	expiration: Expiration = Expiration.expireOnReach;
 
-	readOnly: boolean = false; // Anim doesn't update the value, only checks for completeness
-
 	setDefault: boolean = false; // update the default frame on completion
 
 	overrideRate: number = -1; // override the rate from the AnimField
@@ -107,10 +91,12 @@ export class AnimTarget {
 	isSpin: boolean = false; // overrides isAngle and allows an angle to go greater than [-pi, pi]
 	spinDir: SpinDir = SpinDir.CLOSEST; // force rotation direction
 
+	overrideDelta: boolean = false;
+
 	/* prototype fields */
 
 	editFields: Array<string> = [
-		'value', 'count', 'expiration', 'overrideRate', 'isSpin', 'spinDir'
+		'value', 'count', 'expiration', 'overrideRate', 'isSpin', 'spinDir', 'overrideDelta'
 	];
 	ranges: Dict<Range> = { 'overrideRate': 'real' };
 
@@ -144,7 +130,7 @@ export class AnimTarget {
 		}
 
 		let rate = field.rate;
-		if ( this.overrideRate > 0 ) rate = this.overrideRate;
+		if ( this.overrideRate >= 0 ) rate = this.overrideRate;
 
 		if ( rate < 0 ) {
 			throw new Error( 'Anim.getRate: negative rate for field ' + targetKey );
@@ -192,6 +178,7 @@ export class AnimFrame {
 
 	targets: Dict<AnimTarget> = {};
 	funcs: Array<AnimFunc>;
+
 	tag: string = '';
 	delay: MilliCountdown = 0;
 
@@ -322,6 +309,7 @@ export class PhysField extends AnimField {
 		}
 
 		if ( options.accel === undefined ) options.accel = 0.1;
+		if ( options.isAngle === undefined ) options.isAngle = false;
 
 		let typesOk = false;
 		if ( obj[varname] instanceof Vec2 && obj[derivname] instanceof Vec2 ) {
@@ -337,6 +325,7 @@ export class PhysField extends AnimField {
 
 		this.derivname = derivname;
 		this.accel = Math.abs( options.accel );
+		this.isAngle = options.isAngle;
 	}
 
 	zero() {
@@ -360,6 +349,12 @@ export class PhysField extends AnimField {
 
 		let d0 = this.obj[this.varname] as Vec2;
 		let d1 = this.obj[this.derivname] as Vec2;
+
+		if ( target.overrideDelta ) {
+			d1.set( target.value.times( step ) );
+
+			return;
+		}
 
 		let diff = target.value.minus( d0 );
 
@@ -394,6 +389,12 @@ export class PhysField extends AnimField {
 	updateNumber( step: number, elapsed: number, targetKey: string, target: AnimTarget ) {
 		if ( !( typeof target.value == 'number' ) ) {
 			throw new Error( 'Anim.update: expected Vec2 or number target for field ' + targetKey );
+		}
+
+		if ( target.overrideDelta ) {
+			this.obj[this.derivname] = target.value * step;
+
+			return;
 		}
 
 		let d0 = this.obj[this.varname] as number;
@@ -480,7 +481,7 @@ export class Anim {
 		}
 
 		for ( let key in frame.targets ) {
-			this.setDefault( key, frame.targets[key] );
+			this.setDefault( key, frame.targets[key] ); // TODO: change type of constructor so it is clear that target ops are ignored
 		}
 	}
 
@@ -502,11 +503,13 @@ export class Anim {
 	isDone( threadIndices: Array<number>=[] ): boolean {
 		if ( threadIndices.length > 0 ) {
 			for ( let index of threadIndices ) {
-				if ( index >= this.threads.length ) {
-					throw new Error( this.name + ': index out of range (' + index + '>' + this.threads.length + ')' );
+				if ( index < 0 ) {
+					throw new Error( this.name + ' + isDone: Index out of range (' + index + ', len=' + this.threads.length + ')' );
 				}
 
-				if ( this.threads[index].length > 0 ) return false;
+				if ( index in this.threads && this.threads[index].length > 0 ) return false;
+
+				// return true for nonexistent threads
 			}
 		} else {
 			for ( let thread of this.threads ) {
@@ -600,10 +603,10 @@ export class Anim {
 							  JSON.stringify( frame.targets ) );
 			}
 
-			if ( target.expiration == Expiration.expireOnReach ||
+			if ( target.expiration == Expiration.expireOnReach && !target.overrideDelta ||
 				 ( target.expiration == Expiration.expireOnCount && target.count > 0 ) ||
 				 ( target.expiration == Expiration.reachOnCount && target.count > 0 ) ) {
-				target._inProgress = true;
+					target._inProgress = true;
 			}
 		}
 
@@ -657,8 +660,10 @@ export class Anim {
 				if ( options.tag ) frame.tag = options.tag; 
 				frame.delay = options.delay;
 
-				if ( !( threadIndex in this.threads ) ) {
-					this.threads[threadIndex] = [];
+				for ( let i = 0; i <= threadIndex; i++ ) {
+					if ( !( i in this.threads ) ) {
+						this.threads[i] = [];
+					}
 				}
 
 				this.threads[threadIndex].push( frame );
@@ -679,33 +684,6 @@ export class Anim {
 		return success;
 	}
 
-	getThread( sequenceKey: string, threadIndex: number=0 ): Array<AnimFrame> {
-		let thread: Array<AnimFrame> = [];
-
-		if ( sequenceKey ) {
-			if ( !( sequenceKey in this.sequences ) ) {
-				console.error( this.name + ' getSequence: No sequence ' + sequenceKey ); 
-			} else {
-				thread = this.sequences[sequenceKey];
-			}
-
-			// ignore threadIndex
-
-		} else {
-			if ( threadIndex >= this.threads.length ) {
-				console.error( this.name + ' getThread: Thread index out of range (' + threadIndex + '>=' + this.threads.length );
-
-			} else if ( threadIndex < 0 ) {
-				console.error( this.name + ' getThread: Negative thread index (' + threadIndex + ')' );
-
-			} else {
-				thread = this.threads[threadIndex];
-			}
-		}
-
-		return thread;
-	}
-
 	pushEmptyFrame( sequenceKey: string, threadIndex: number=0 ) {
 		let thread = this.getThread( sequenceKey, threadIndex );
 
@@ -717,6 +695,8 @@ export class Anim {
 
 		thread.splice( frameIndex, 1 );
 	}
+
+	/* Sequences */
 
 	addSequence( sequenceKey: string ) {
 		if ( !sequenceKey ) {
@@ -758,6 +738,30 @@ export class Anim {
 		delete this.sequences[sequenceKey];
 	}
 
+	/* Accessors */
+
+	getThread( sequenceKey: string, threadIndex: number=0 ): Array<AnimFrame> {
+		let thread: Array<AnimFrame> = [];
+
+		if ( sequenceKey ) {
+			if ( !( sequenceKey in this.sequences ) ) {
+				console.error( this.name + ' getSequence: No sequence ' + sequenceKey ); 
+			} else {
+				thread = this.sequences[sequenceKey]; // ignore threadIndex
+			}
+
+		} else {
+			if ( threadIndex < 0 || !( threadIndex in this.threads ) ) {
+				console.error( this.name + ' getThread: Index out of range (' + threadIndex + ', len=' + this.threads.length );
+
+			} else {
+				thread = this.threads[threadIndex];
+			}
+		}
+
+		return thread;
+	}
+
 	getFieldValue( key: string ): AnimValue {
 		if ( !( key in this.fields ) ) {
 			throw new Error( this.name + ' getFieldValue: No key ' + key ); 
@@ -777,8 +781,13 @@ export class Anim {
 			throw new Error( 'Anim.update: expected number rate for field ' + key );
 		}*/
 
-		if ( !target.readOnly ) {
-			let value = field.get() as number;
+		let value = field.get() as number;
+
+		if ( target.overrideDelta ) {
+			value += target.value * step;
+			console.log( 'value: ' + value + ' step ' + step );
+
+		} else {
 			let diff = value - target.value;
 
 			if ( field.isAngle && !target.isSpin ) {
@@ -806,9 +815,9 @@ export class Anim {
 			} else { // diff > 0
 				value -= rate;
 			}
-
-			field.set( value );
 		}
+
+		field.set( value );
 
 		if ( field.get() == target.value && target.expiration == Expiration.expireOnReach ) {
 			target._inProgress = false;
@@ -856,9 +865,12 @@ export class Anim {
 			throw new Error( 'Anim.update: expected number rate for field ' + key );
 		}*/
 
-		if ( !target.readOnly ) {
-			let value = field.obj[field.varname] as Vec2;
+		let value = field.obj[field.varname] as Vec2;
 
+		if ( target.overrideDelta ) {
+			value.add( target.value.times( step ) );
+
+		} else {
 			let diff = target.value.minus( value );
 
 			let rate = target.getRate( step, elapsed, targetKey, field, diff );
@@ -1005,11 +1017,9 @@ export class Anim {
 					throw new Error( 'Anim.update: expected boolean target for field ' + key );
 				}
 				
-				if ( !target.readOnly ) {
-					field.set( target.value );
-				}
+				field.set( target.value );
 
-				if ( field.get() == target.value && target.expiration == Expiration.expireOnReach ) {
+				if ( target.expiration == Expiration.expireOnReach ) {
 					target._inProgress = false;
 				}
 
@@ -1028,7 +1038,7 @@ export class Anim {
 		}
 
 		for ( let func of frame.funcs ) {
-			if ( !func._hasBeenRun ) {
+			if ( !func._hasBeenRun || func.eachUpdate ) {
 				func.caller[func.funcName].apply( func.caller, func.args );
 
 				func._hasBeenRun = true;

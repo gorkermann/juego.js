@@ -1,5 +1,8 @@
+import * as tp from '../lib/toastpoint.js'
+
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
+import { constructors, nameMap } from '../constructors.js'
 import { Entity, TopLeftEntity } from '../Entity.js'
 import { Line } from '../Line.js'
 import { RayHit } from '../RayHit.js'
@@ -338,6 +341,24 @@ function test_replacePresetShapes( tf: TestFuncs ) {
 					 new Vec2( 0, -20 )] );
 }
 
+function shake_copy( tf: TestFuncs ) {
+
+	// copy()
+	let e = new Entity( new Vec2(), 0, 0 );
+	let e2 = new Entity( new Vec2(), 0, 0 );
+
+	e.parent = e2;
+	let copy = e.copy();
+
+	tf.ASSERT( copy !== null );
+	tf.ASSERT( copy.parent === null );
+
+	// toToast()
+	let toaster = new tp.Toaster( constructors, nameMap );
+
+	tf.ASSERT( e.toToast( toaster ) !== null );
+}
+
 let tests: Array<Test> = [];
 
 tests.push( new Test( 'Entity',
@@ -351,9 +372,7 @@ tests.push( new Test( 'Entity',
 					   'applyTransform',
 					   'unapplyTransform'],
 					  ['init',
-					   'toJSON',
 					   '_subDestructor',
-					   'clearCollisionData',
 					   'shade',
 					   'draw'] ) );
 
@@ -367,19 +386,26 @@ tests.push( new Test( 'TopLeftEntity',
 
 tests.push( new Test( 'Entity',
 					  test_EntityOverlap,
-					  ['canBeHitBy'],[] 
+					  ['canBeHitBy'],
 					  ) ); 
 
 tests.push( new Test( 'Entity',
 					  test_EntityCopy,
-					  [],[] 
+					  [],
 					  ) ); 
 
 tests.push( new Test( 'Entity',
 					  test_replacePresetShapes,
 					  ['replacePresetShapes',
-					   'unapplyTransformToShape'],[]
+					   'unapplyTransformToShape'],
 					  ) );
+
+tests.push( new Test( 'Entity',
+					  shake_copy,
+					  ['copy',
+					   'toToast'],
+					  ) );
+
 
 tests.push( new Test( 'IsoTriangleEntity',
 					  ( tf: TestFuncs ) => tf.ASSERT( true ),
