@@ -15,3 +15,15 @@ export function toToast( this: any, toaster: tp.Toaster ): any {
 
 	return flat;
 }
+
+export class FuncCall<Func extends ( this: any, ...args: any ) => any> { // TS doesn't check that Func has the correct this value, so leaving it as any
+	caller: any;
+	funcName: string;
+	args: Parameters<Func>;
+
+	constructor( caller: any, funcName: string, args: Parameters<Func> ) {
+		this.caller = caller;
+		this.funcName = funcName;
+		this.args = args;
+	}
+}

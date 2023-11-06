@@ -4,14 +4,6 @@ import { Vec2 } from './Vec2.js'
 
 import { Debug } from './Debug.js'
 
-let canvas: HTMLCanvasElement;
-let context: CanvasRenderingContext2D;
-
-if ( typeof window != 'undefined' ) {
-	canvas = ( window as any ).canvas;
-	context = ( window as any ).context;
-}
-
 function pushUnique<Type>( newObj: Type, list: Array<Type>, compare: ( a: Type, b: Type ) => boolean ) {
 	for ( let obj of list ) {
 		if ( compare( newObj, obj ) ) return;
@@ -60,6 +52,23 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			solidContacts = [];
 			contacted = null;
 
+			// debug draw
+			/*if ( ( window as any ).context ) {
+				for ( let entity of otherEntities ) {
+					let shapes = entity.getShapes( stepTotal + partialStep );
+
+					for ( let shape of shapes ) {
+						shape.stroke( ( window as any ).context );
+					}
+				}
+
+				let shapes = entity.getShapes( stepTotal + partialStep );
+
+				for ( let shape of shapes ) {
+					shape.stroke( ( window as any ).context );
+				}
+			}*/ // debug draw
+
 			// TODO: rank contacts
 			for ( let otherEntity of otherEntities ) {
 				if ( !entity.canBeHitBy( otherEntity ) ) continue;
@@ -86,14 +95,14 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 		}
 
 		 // debug draw
-		if ( context ) {
+		if ( ( window as any ).context ) {
 			//context.clearRect( 0, 0, canvas.width, canvas.height );
 
 			shapes.push( ...entity.getShapes( stepTotal + partialStep ) );
 			if ( contacted ) shapes.push( ...contacted.getShapes( stepTotal + partialStep ) );
 			
 			for ( let shape of shapes ) {
-				shape.stroke( context );
+				shape.stroke( ( window as any ).context );
 			}
 		} // debug draw
 

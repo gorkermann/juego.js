@@ -7,6 +7,7 @@ import { Entity } from './Entity.js'
 import { GridArea } from './GridArea.js'
 import { Line } from './Line.js'
 import { Material } from './Material.js'
+import { FuncCall } from './serialization.js'
 import { Shape } from './Shape.js'
 import { Sound } from './Sound.js'
 import { TileArray } from './TileArray.js'
@@ -32,6 +33,7 @@ addClass( 'AnimTarget', AnimTarget );
 addClass( 'IsoTriangleEntity', IsoTriangleEntity );
 addClass( 'RightTriangleEntity', RightTriangleEntity );
 addClass( 'OvalEntity', OvalEntity );
+addClass( 'FuncCall', FuncCall );
 
 // define special constructors here
 // constructors[className] =  () => new Class( false );
