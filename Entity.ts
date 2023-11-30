@@ -105,7 +105,7 @@ export class Entity {
 	/* fields from Editable */
 
 	edit: ( varname: string, value: any ) => void = rangeEdit;
-	editFields: Array<string> = ['name', 'parent', 'pos', 'angle', 'width', 'height', '_subs', 'anim'];
+	editFields: Array<string> = ['name', 'parent', 'pos', 'angle', 'width', 'height', '_subs', 'anim', 'collisionGroup', 'collisionMask'];
 	ranges: Dict<Range> = {
 		angle: 'real',
 	};
@@ -478,19 +478,20 @@ export class Entity {
 	}
 
 	hitWithMultiple( otherEntity: Entity, contacts: Array<Contact> ): void {
-		let rootsHit = false;
+		// If an entity has multiple shapes, multiple contacts can be generated
+		// TODO: sort incoming contacts per sub, use one with lowest slice?
+
+		// HMMM: does it make sense to limit to a single contact between two entity trees?
+		// (counterexample: explosion hits multiple weak points?)
+		let subsHitById: Array<boolean> = []; // indexed by id
 
 		if ( contacts.length > 0 ) {
 			for ( let contact of contacts ) {
-				if ( contact.sub == this && contact.otherSub == otherEntity ) {
-					if ( !rootsHit ) {
-						rootsHit = true;
-					} else {
-						continue;
-					}
-				}
+				if ( subsHitById[contact.sub.id] ) continue;
 				
 				this.hitWith( contact.otherSub, contact );
+
+				subsHitById[contact.sub.id] = true;
 			}
 		}
 	}
