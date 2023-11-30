@@ -588,16 +588,6 @@ export class Shape {
 		if ( Math.abs( v.y ) < VEL_EPSILON ) v.y = 0;
 
 		return v;
-
-		// old calculation
-		/*let p = point.minus( this.parent.pos );
-		if ( this.parent.relPos ) {
-			p.add( this.parent.relPos.turned( this.parent.angle ) );
-		}
-
-		let p2 = p.turned( this.parent.angleVel * step );*/
-
-		//return this.parent.vel.plus( p2.minus( p ) );
 	}
 
 	getArea(): number {
