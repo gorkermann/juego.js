@@ -39,13 +39,28 @@ let cornerShaders: Array<( mat: Material, score: number ) => void> = [];
 
 cornerShaders.push( 
 	function( mat: Material, score: number ): void {
-		mat.hue += score * 10 * mat.alpha;
+		let greenness = Math.abs( mat.hue - 120 );
+		if ( greenness > 180 ) greenness = 360 - greenness;
+		greenness = Math.max( 60 - greenness, 0 );
+
+		mat.hue += score * ( 10 + greenness ) * mat.alpha;
 	}
 )
 
 cornerShaders.push( 
 	function( mat: Material, score: number ): void {
 		if ( score > 0 ) mat.lum = score * 0.9;
+	}
+)
+
+// same as 0, but ignores score
+cornerShaders.push( 
+	function( mat: Material, score: number ): void {
+		let greenness = Math.abs( mat.hue - 120 );
+		if ( greenness > 180 ) greenness = 360 - greenness;
+		greenness = Math.max( 60 - greenness, 0 );
+
+		mat.hue += score * ( 10 + greenness ) * mat.alpha;
 	}
 )
 

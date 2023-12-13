@@ -76,7 +76,9 @@ export class Entity {
 
 	material: Material = new Material( 0, 0, 0.5 ); // default color
 
-	presetShapes: Array<Shape> = []; // overrides return value of this._getDefaultShapes()
+	presetShapes: Array<Shape> = []; // overrides return value of this._getDefaultShapes(). Only updated when basic shapes are changed
+	cachedShapes: Array<Array<Shape>> = []; // overrides the return value of this.getShapes(). Updated every frame
+	inMotion: boolean = false;
 
 	// Collision
 	isGhost: boolean = false;		// if true, this entity doesn't generate shapes (no draw or collide, subs still can)
@@ -95,6 +97,8 @@ export class Entity {
 	className: string = 'Entity';
 
 	anim: Anim = null;
+
+	frozen: boolean = false;
 
 	/* fields from Selectable */
 
@@ -173,11 +177,15 @@ export class Entity {
 	/* update */
 
 	advance( step: number ) {
+		if ( this.frozen ) return;
+
 		if ( !this.noAdvance ) {
 			this.pos.add( this.vel.times( step ) );
 		}
 		
 		this.angle += this.angleVel * step;
+
+		this.cachedShapes = [];
 
 		for ( let sub of this.getSubs() ) {
 			sub.advance( step );
@@ -191,6 +199,8 @@ export class Entity {
 	}
 
 	_animateRecur( step: number, elapsed: number ) {
+		if ( this.frozen ) return;
+
 		this.animate( step, elapsed );
 
 		for ( let sub of this.getSubs() ) {
@@ -201,6 +211,8 @@ export class Entity {
 	update() {}
 
 	_updateRecur() {
+		if ( this.frozen ) return;
+
 		this.update();
 
 		for ( let sub of this.getSubs() ) {
@@ -241,9 +253,14 @@ export class Entity {
 
 	// don't override! override getOwnShapes instead
 	getShapes( step: number=0.0 ): Array<Shape> {
-		let shapes: Array<Shape> = [];
+		if ( !this.parent ) {
+			if ( this.cachedShapes[0] ) {
+				if ( step == 0.0 || !this.inMotion ) return this.cachedShapes[0];
+			}
+			if ( step == 1.0 && this.cachedShapes[1] ) return this.cachedShapes[1];
+		}
 
-		shapes = this.getOwnShapes();
+		let shapes: Array<Shape> = this.getOwnShapes();
 
 		for ( let sub of this.getSubs() ) {
 			shapes.push( ...sub.getShapes( step ) );
@@ -257,6 +274,15 @@ export class Entity {
 			for ( let n of shape.normals ) {
 				this.applyTransform( n, step, { local: true, angleOnly: true } );
 			}
+		}
+
+		for ( let shape of shapes ) {
+			shape.calcMinMax();
+		}
+
+		if ( !this.parent ) {
+			if ( step == 0.0 ) this.cachedShapes[0] = shapes;
+			if ( step == 1.0 ) this.cachedShapes[1] = shapes;
 		}
 
 		return shapes;
@@ -366,7 +392,7 @@ export class Entity {
 		return p;
 	}
 
- 	/* childrem */
+ 	/* children */
 
 	cull() {
 		for ( let sub of this.getSubs() ) {
@@ -453,6 +479,18 @@ export class Entity {
 
 		for ( let shape of shapes ) {
 			for ( let otherShape of otherShapes ) {
+				if ( shape.minmax.length == 0 ) shape.calcMinMax();
+				if ( otherShape.minmax.length == 0 ) otherShape.calcMinMax();
+
+				if ( shape.minmax[0].x < otherShape.minmax[0].x - 1 &&
+					 shape.minmax[1].x < otherShape.minmax[0].x - 1) continue;
+				if ( shape.minmax[0].x > otherShape.minmax[1].x + 1 &&
+					 shape.minmax[1].x > otherShape.minmax[1].x + 1 ) continue;
+				if ( shape.minmax[0].y < otherShape.minmax[0].y - 1 &&
+					 shape.minmax[1].y < otherShape.minmax[0].y - 1 ) continue;
+				if ( shape.minmax[0].y > otherShape.minmax[1].y + 1 &&
+					 shape.minmax[1].y > otherShape.minmax[1].y + 1 ) continue;
+
 				let contact = null;
 				let maxScore = 0;
 

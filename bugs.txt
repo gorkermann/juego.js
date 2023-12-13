@@ -1,0 +1,3 @@
+TestFuncs.ASSERT_EQ for nested arrays, i.e. [[1,2], [0,3]], prints un-nested arrays in output
+
+showfields not shown

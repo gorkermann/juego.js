@@ -1,7 +1,7 @@
 import { Vec2 } from './Vec2.js'
 
-export type Angle_PosTurn = number; // 0 to 2*pi
-export type Angle_HalfTurn = number; // -pi to pi
+export type Angle_PosTurn = number; // 0 to 2*pi (inclusive?)
+export type Angle_HalfTurn = number; // -pi to pi (inclusive)
 export type Angle_Unbound = number;
 
 export class Angle {
@@ -10,6 +10,14 @@ export class Angle {
 
 		if ( angle > Math.PI ) angle -= Math.PI * 2;
 		if ( angle < -Math.PI) angle += Math.PI * 2;
+
+		return angle;
+	}
+
+	static toPosTurn( angle: number ): Angle_PosTurn {
+		angle %= ( Math.PI * 2 );
+
+		if ( angle < 0 ) angle += Math.PI * 2;
 
 		return angle;
 	}

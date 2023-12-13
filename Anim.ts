@@ -44,7 +44,7 @@ type AnimFunc = {
 	_hasBeenRun?: boolean;
 }
 
-export enum SpinDir {
+export enum TurnDir {
 	CLOSEST = 0,
 	CW,
 	CCW
@@ -61,7 +61,7 @@ type AnimTargetOptions = {
 	derivNo?: number;
 
 	isSpin?: boolean;
-	spinDir?: SpinDir;
+	turnDir?: TurnDir;
 
 	overrideDelta?: boolean;
 }
@@ -88,15 +88,15 @@ export class AnimTarget {
 	overrideRate: number = -1; // override the rate from the AnimField
 	derivNo: number = 0; // 0 for value, 1 for first derivative
 
-	isSpin: boolean = false; // overrides isAngle and allows an angle to go greater than [-pi, pi]
-	spinDir: SpinDir = SpinDir.CLOSEST; // force rotation direction
+	isSpin: boolean = false; // overrides AnimField.isAngle and allows an angle to go greater than [-pi, pi]
+	turnDir: TurnDir = TurnDir.CLOSEST; // force rotation direction
 
 	overrideDelta: boolean = false;
 
 	/* prototype fields */
 
 	editFields: Array<string> = [
-		'value', 'count', 'expiration', 'overrideRate', 'isSpin', 'spinDir', 'overrideDelta'
+		'value', 'count', 'expiration', 'overrideRate', 'isSpin', 'turnDir', 'overrideDelta'
 	];
 	ranges: Dict<Range> = { 'overrideRate': 'real' };
 
@@ -408,8 +408,8 @@ export class PhysField extends AnimField {
 			target.value = Angle.normalize( target.value );
 			diff = Angle.normalize( diff );
 
-			if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
-				 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
+			if ( ( diff > 0 && target.turnDir == TurnDir.CW ) ||
+				 ( diff < 0 && target.turnDir == TurnDir.CCW ) ) {
 				diff = Angle.normalize( Math.PI * 2 - diff );	
 			}
 		}
@@ -422,6 +422,13 @@ export class PhysField extends AnimField {
 
 		// instantaneous acceleration
 		if ( !target.derivNo ) {
+			let close = Math.abs( diff ) <= rate;
+			if ( this.isAngle && target.turnDir == TurnDir.CW ) {
+				close = -diff < rate;
+			} else if ( this.isAngle && target.turnDir == TurnDir.CCW ) {
+				close = diff < rate; // TODO: correct diffs for angles
+			}
+
 			if ( Math.abs( diff ) <= rate || !rate ) {
 				this.obj[this.derivname] = target.value - d0; // phys.value will hit target when deriv is added
 
@@ -487,7 +494,7 @@ export class Anim {
 
 	/**
 	 * default frame ignores most of the fields in AnimTarget and only takes a value 
-	 * could potentially also take: derivNo, isSpin, spinDir
+	 * could potentially also take: derivNo, isSpin, turnDir
 	 * 
 	 * @param {string}	 key	[description]
 	 * @param {AnimTarget} target [description]
@@ -795,8 +802,8 @@ export class Anim {
 				target.value = Angle.normalize( target.value );
 				diff = Angle.normalize( diff );
 
-				if ( ( diff > 0 && target.spinDir == SpinDir.CW ) ||
-					 ( diff < 0 && target.spinDir == SpinDir.CCW ) ) {
+				if ( ( diff > 0 && target.turnDir == TurnDir.CW ) ||
+					 ( diff < 0 && target.turnDir == TurnDir.CCW ) ) {
 					diff = Angle.normalize( Math.PI * 2 - diff );	
 				}
 			}

@@ -20,6 +20,8 @@ import { Debug } from './Debug.js'
 
 let zeroVector = new Vec2( 0, 0 );
 
+let LENGTH_EPSILON = 0.001;
+
 export type WorldPoint = Vec2
 export type LocalPoint = Vec2
 type Dir = Vec2
@@ -85,6 +87,8 @@ export class Shape {
 	material: Material = new Material( 0, 0, 0 );
 
 	hollow: boolean = false;
+
+	minmax: Array<Vec2> = [];
 
 	constructor() {}
 
@@ -265,6 +269,10 @@ export class Shape {
 
 		return Shape.fromPoints( [min, new Vec2( max.x, min.y ),
 								  max, new Vec2( min.x, max.y ) ] );
+	}
+
+	calcMinMax() {
+		this.minmax = Shape.getMinMax( this.points );
 	}
 
 	forEachIndex( func: ( i: number, iNext: number ) => void, start: number=0 ) {
@@ -818,6 +826,10 @@ export class Shape {
 			do {
 				p = v1.alongTo( v2, l / dist );
 				let pLen = p.length();
+				if ( pLen < LENGTH_EPSILON ) pLen = LENGTH_EPSILON; // drawing a line that passes exactly through the origin
+																	// TODO: the math breaks down below a certain distance, draw things
+																	// normally?
+
 				let r = ir - ir * lens / ( pLen ** 0.5 + 1 );
 				d = p.times( r / pLen ).plus( origin );
 

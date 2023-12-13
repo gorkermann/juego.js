@@ -16,17 +16,15 @@ function solverDirCompare( dir1: Contact, dir2: Contact ) {
 	return dir1.normal.equals( dir2.normal );
 }
 
-function pullDirCompare( dir1: Contact, dir2: Contact ) {
-	return dir1.sub === dir2.sub;
-}
-
 export type SolverResult = {
 	blockedDirs: Array<Vec2>,
 	crushed: boolean,
 	crusher: Entity
 }
 
-export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>, solidMask: number, step: number ): SolverResult {
+let VEL_EPSILON = 0.001;
+
+export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>, solidMask: number, pushMask: number, step: number ): SolverResult {
 	let stepTotal = 0.0;
 	let lastTotal = 0.0;
 	let contacted: Entity = null;
@@ -95,7 +93,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 		}
 
 		 // debug draw
-		if ( ( window as any ).context ) {
+		/*if ( ( window as any ).context ) {
 			//context.clearRect( 0, 0, canvas.width, canvas.height );
 
 			shapes.push( ...entity.getShapes( stepTotal + partialStep ) );
@@ -104,7 +102,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			for ( let shape of shapes ) {
 				shape.stroke( ( window as any ).context );
 			}
-		} // debug draw
+		}*/ // debug draw
 
 		for ( let contact of solidContacts ) {
 			
@@ -126,35 +124,30 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			}
 
 			/* object pushes player */
-			let push = contact.vel.copy();
+			if ( contact.otherSub.collisionGroup & pushMask ) {
+				let len = contact.vel.length();
 
-			// cancel part of contact velocity parallel to player velocity (i.e. don't double-add this)
-			let dir = contact.vel.unit();
-			let vdot = dir.dot( entity.vel );
+				if ( len > VEL_EPSILON ) {
+					let push = contact.vel.copy();
 
-			if ( vdot > 0 ) {
-				push.sub( dir.times( vdot ) );
-			}
-			
-			// add push to player velocity
-			let ahead = entity.pos.minus( contact.point ).dot( push ) > 0;
-			if ( ahead ) {
-				entity.vel.add( push.times( step - stepTotal ) );
+					// cancel part of contact velocity parallel to player velocity (i.e. don't double-add this)
+					let dir = contact.vel.times( 1 / len ); // reuse len instead of calling unit() here
+					let vdot = dir.dot( entity.vel );
 
-				// potential crush directions
-				pushUnique( contact, pushDirs, solverDirCompare );
-			}
+					if ( vdot > 0 ) {
+						push.sub( dir.times( vdot ) );
+					}
+					
+					// add push to player velocity
+					let ahead = entity.pos.minus( contact.point ).dot( push ) > 0;
+					if ( ahead ) {
+						entity.vel.add( push.times( step - stepTotal ) );
 
-			/* player pulls self */
-			/*if ( contact.ovel.lengthSq() > 0 ) {
-				let dir = pullDirs.find( x => x.sub == contact.sub );
-				if ( !dir ) {
-					contact.ovel.scale( step - stepTotal );
-					entity.vel.add( contact.ovel );
-
-					pushUnique( contact, pullDirs, pullDirCompare );
+						// potential crush directions
+						pushUnique( contact, pushDirs, solverDirCompare );
+					}
 				}
-			}*/
+			}
 		}
 
 		stepTotal += partialStep;

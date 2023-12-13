@@ -54,9 +54,12 @@ export class GridArea {
 	
 	collisionLayer: TileArray = null;
 	spawnLayer: TileArray = null;
-	
+
 	tileWidth: number = 0;
 	tileHeight: number = 0;
+
+	roomWidth: number = 0;
+	roomHeight: number = 0;
 
 	constructor() {}
 
@@ -75,7 +78,9 @@ export class GridArea {
 		gridArea.vTiles = data.height;
 		gridArea.tileWidth = data.tilewidth;
 		gridArea.tileHeight = data.tileheight;
-		
+		gridArea.roomWidth = data.roomwidth;
+		gridArea.roomHeight = data.roomheight;
+
 		for ( let fileLayer of data.layers ) {
 			
 			let layer: TileArray = new TileArray( data.width, fileLayer.data );
