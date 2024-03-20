@@ -6,7 +6,7 @@
 	A polygon (a single, non-self-intersecting closed loop of line segments)
  */
 
-import * as polyclip from 'polyclip-ts'
+//import * as polyclip from 'polyclip-ts'
 
 import { Entity } from './Entity.js'
 import { Contact } from './Contact.js'
@@ -697,11 +697,14 @@ export class Shape {
 		let rings2 = shapes2.map( s => [s.points.map( p => [p.x, p.y] ) as Array<[number, number]>] );
 
 		if ( op == 'union' ) {
-			multiPoly = polyclip.union( rings1, rings2 );
+			//multiPoly = polyclip.union( rings1, rings2 );
+			throw new Error( 'Shape.doBool: module polyclip removed from project' );
 		} else if ( op == 'intersection' ) {
-			multiPoly = polyclip.intersection( rings1, rings2 );
+			//multiPoly = polyclip.intersection( rings1, rings2 );
+			throw new Error( 'Shape.doBool: module polyclip removed from project' );
 		} else if ( op == 'difference' ) {
-			multiPoly = polyclip.difference( rings1, rings2 );
+			//multiPoly = polyclip.difference( rings1, rings2 );
+			throw new Error( 'Shape.doBool: module polyclip removed from project' );
 		} else {
 			throw new Error( 'Shape.doBool: Invalid operation ' + op );
 		}

@@ -71,7 +71,8 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			for ( let otherEntity of otherEntities ) {
 				if ( !entity.canBeHitBy( otherEntity ) ) continue;
 
-				let contacts = entity.overlaps( otherEntity, stepTotal + partialStep );
+				// TODO: invalidate cache[1] once velocity is changed?
+				let contacts = entity.overlaps( otherEntity, stepTotal + partialStep, true );
 				
 				if ( contacts.length > 0 ) {
 					contacted = otherEntity;

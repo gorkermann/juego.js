@@ -33,7 +33,7 @@ export class Chrono {
 	}
 }
 
-type AnimValue = number | boolean | Vec2 | string;
+type AnimValue = number | boolean | Vec2;
 
 type AnimFunc = {
 	caller: any;
@@ -294,6 +294,23 @@ export class AnimField {
 	}
 }
 
+function adjustAngleDiff( diff: number, turnDir: TurnDir ): number {
+	if ( Math.abs( diff ) < 0.0001 ) {
+		return 0;
+
+	// CW turns should have a negative difference, positive rate
+	} else if ( diff > 0 && turnDir == TurnDir.CW ) {
+		return diff - Math.PI * 2;
+
+	// CCW turns should have a positive difference, negative rate
+	} else if ( diff < 0 && turnDir == TurnDir.CCW ) {
+		return Math.PI * 2 - diff;
+	
+	} else {
+		return diff;
+	}
+}
+
 export class PhysField extends AnimField {
 	derivname: string; // obj[derivname]: number | Vec2
 
@@ -407,11 +424,7 @@ export class PhysField extends AnimField {
 			d0 = this.obj[this.varname];
 			target.value = Angle.normalize( target.value );
 			diff = Angle.normalize( diff );
-
-			if ( ( diff > 0 && target.turnDir == TurnDir.CW ) ||
-				 ( diff < 0 && target.turnDir == TurnDir.CCW ) ) {
-				diff = Angle.normalize( Math.PI * 2 - diff );	
-			}
+			diff = adjustAngleDiff( diff, target.turnDir );
 		}
 
 		let rate = target.getRate( step, elapsed, targetKey, this, diff );
@@ -422,13 +435,6 @@ export class PhysField extends AnimField {
 
 		// instantaneous acceleration
 		if ( !target.derivNo ) {
-			let close = Math.abs( diff ) <= rate;
-			if ( this.isAngle && target.turnDir == TurnDir.CW ) {
-				close = -diff < rate;
-			} else if ( this.isAngle && target.turnDir == TurnDir.CCW ) {
-				close = diff < rate; // TODO: correct diffs for angles
-			}
-
 			if ( Math.abs( diff ) <= rate || !rate ) {
 				this.obj[this.derivname] = target.value - d0; // phys.value will hit target when deriv is added
 
@@ -730,7 +736,6 @@ export class Anim {
 
 		toaster = new tp.Toaster( animConstructors );
 		let frames = tp.fromJSON( json, toaster ) as Array<AnimFrame>;
-		tp.resolveList( [frames], toaster );
 
 		frames.map( x => this.initFrame( x ) );
 
@@ -801,11 +806,7 @@ export class Anim {
 				value = Angle.normalize( value );
 				target.value = Angle.normalize( target.value );
 				diff = Angle.normalize( diff );
-
-				if ( ( diff > 0 && target.turnDir == TurnDir.CW ) ||
-					 ( diff < 0 && target.turnDir == TurnDir.CCW ) ) {
-					diff = Angle.normalize( Math.PI * 2 - diff );	
-				}
+				diff = adjustAngleDiff( diff, target.turnDir );
 			}
 
 			let rate = target.getRate( step, elapsed, targetKey, field, diff );
@@ -829,38 +830,6 @@ export class Anim {
 		if ( field.get() == target.value && target.expiration == Expiration.expireOnReach ) {
 			target._inProgress = false;
 		}
-	}
-
-	updateString( step: number, elapsed: number, targetKey: string, field: AnimField, target: AnimTarget ) {
-		if ( typeof target.value != 'string' ) {
-			throw new Error( 'Anim.update: expected string target for field ' + targetKey );
-		}
-
-		let value = field.get() as string;
-
-		if ( target.value.indexOf( value ) < 0 ) {
-			value = '';
-		}
-
-		let diff = Math.abs( target.value.length - value.length );
-		let rate = target.getRate( step, elapsed, targetKey, field, diff );
-
-		/*if ( target.expiration == Expiration.reachOnCount && target.count + elapsed > 0 ) {
-			rate = diff * elapsed / ( target.count + elapsed );
-		}*/
-
-		rate = Math.floor( rate );
-
-		if ( diff <= rate || !rate ) {
-			value = target.value;
-
-			if ( target.expiration == Expiration.expireOnReach ) target._inProgress = false;
-		
-		} else {
-			value = target.value.slice( 0, value.length + rate );
-		}
-
-		field.obj[field.varname] = value;
 	}
 
 	updateVec2( step: number, elapsed: number, targetKey: string, field: AnimField, target: AnimTarget ) {
@@ -1035,9 +1004,6 @@ export class Anim {
 
 			} else if ( typeof value == 'number' ) {
 				this.updateNumber( step, elapsed, key, field, target );
-
-			} else if ( typeof value == 'string' ) {
-				this.updateString( step, elapsed, key, field, target );
 
 			} else if ( value instanceof Vec2 ) {
 				this.updateVec2( step, elapsed, key, field, target );

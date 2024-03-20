@@ -19,17 +19,19 @@ function shake_Contact( tf: TestFuncs ) {
 }
 
 function test_crush( tf: TestFuncs ) {
+	let COL_WALL = 1;
+
 	let floor = new Entity( new Vec2( 50, 10 ), 100, 20 );
-	floor.collisionGroup = 1;
+	floor.collisionGroup = COL_WALL;
 
 	let player = new Entity( new Vec2( 50, -5 ), 10, 10 );
-	player.collisionMask = 0x01;
+	player.collisionMask = COL_WALL;
 
 	let ceiling = new Entity( new Vec2( 50, -21 ), 100, 20 ); // 1 unit above player's head 
-	ceiling.collisionGroup = 1;
+	ceiling.collisionGroup = COL_WALL;
 
 	let chamfer = new Entity( new Vec2(), 100, 20 );
-	chamfer.collisionGroup = 1;
+	chamfer.collisionGroup = COL_WALL;
 
 	let entities = [floor, ceiling, player];
 
@@ -42,7 +44,7 @@ function test_crush( tf: TestFuncs ) {
 	/* neither moving */
 
 	// floor touches, ceiling doesn't
-	let result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	let result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -50,10 +52,9 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.pos.set( new Vec2( 50, -20 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
-
 
 	/* one moving */
 
@@ -61,7 +62,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, -1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -69,7 +70,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 1, 0 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -77,7 +78,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, 1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -86,7 +87,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, 1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -96,7 +97,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 1, 1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -104,7 +105,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 1, 0.1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -116,7 +117,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, -2 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -125,7 +126,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, -1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -134,7 +135,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, 1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -143,7 +144,7 @@ function test_crush( tf: TestFuncs ) {
 	ceiling.vel.set( new Vec2( 0, -1 ) );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
@@ -167,7 +168,7 @@ function test_crush( tf: TestFuncs ) {
 	setChamfer( Math.PI / 4 );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities2, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( -1, 1 ).unit()], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -175,7 +176,7 @@ function test_crush( tf: TestFuncs ) {
 	setChamfer( Math.PI / 180 * 20 );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities2, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
@@ -183,7 +184,7 @@ function test_crush( tf: TestFuncs ) {
 	setChamfer( Math.PI / 180 * 15 );
 
 	resetPlayer();
-	result = solveCollisionsFor( player, entities2, 0x01, 1.0 );
+	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 }

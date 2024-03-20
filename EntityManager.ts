@@ -26,9 +26,6 @@ function parseJSON( jsonlist: Array<object>, toaster: tp.Toaster ): Array<Entity
 		ents.push( tp.fromJSON( obj, toaster ) );
 	}
 
-	// reattach pointers
-	tp.resolveList( ents, toaster );
-
 	let output: Array<Entity> = [];
 
 	for ( let ent of ents ) {
@@ -48,8 +45,8 @@ function parseJSON( jsonlist: Array<object>, toaster: tp.Toaster ): Array<Entity
 }
 
 export class EntityManager {
-	entities: Array<Entity> = [];
-	entitiesById: Array<Entity> = [];
+	entities: Array<Entity> = []; // entities without parents
+	entitiesById: Array<Entity> = []; // all entities
 
 	constructor() {
 
@@ -93,6 +90,31 @@ export class EntityManager {
 
 	/* Update */
 
+	updateShapeCache() {
+		for ( let entity of this.entities ) {
+			if ( entity.parent ) {
+				console.error( 'Level.defaultUpdate(): non-root entity in entities list' );
+			}
+
+			entity.inMotion = false;
+
+			entity.doForAllChildren( ( child ) => {
+				if ( entity.inMotion ) return;
+
+				if ( child.vel.lengthSq() > 0.0 || child.angleVel != 0.0 ) {
+					entity.inMotion = true;
+				}
+			} );
+
+			entity.cachedShapes = [];
+			entity.cachedShapes[0] = entity.getShapes( 0.0 );
+
+			if ( entity.inMotion ) {
+				entity.cachedShapes[1] = entity.getShapes( 1.0 );
+			}
+		}
+	}
+
 	advance( step: number ) {
 		for ( let entity of this.entities ) {
 			entity.advance( step );
@@ -117,7 +139,6 @@ export class EntityManager {
 		}
 
 		for ( let i = this.entities.length - 1; i >= 0; i-- ) {
-
 			if ( this.entities[i].removeThis ) {
 
 				// free up ids
@@ -138,7 +159,9 @@ export class EntityManager {
 		while ( list.length > 0 ) {
 			let newEntities: Array<Entity> = [];
 
-			for ( let prim of this.entities ) {
+			for ( let prim of this.entitiesById ) {
+				if ( !prim ) continue;
+
 				while ( prim.spawned.length > 0 ) {
 					let spawn = prim.spawned.shift();
 
@@ -162,9 +185,20 @@ export class EntityManager {
 			throw new Error( 'EntityManager.insert: Entity has no collision group set' );
 		}
 
-		this.entities.push( entity );
+		if ( !entity.parent ) {
+			this.entities.push( entity );
+		}
 
 		entity.doForAllChildren( ( e: Entity ) => {
+			let index = this.entitiesById.indexOf( e );
+
+			// already in array
+			if ( index >= 0 ) {
+				e.id = index;
+				return;
+			}
+
+			// id collision
 			if ( this.entitiesById[e.id] ) {
 				e.id = -1;
 			}

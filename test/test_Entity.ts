@@ -49,6 +49,8 @@ function test_Entity_shapes( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s[1].normals[3], new Vec2( -1, 0 ) );
 
 	// position and velocity
+	e.cachedShapes = [];
+
 	e.vel.setValues( 1, 0 );
 	e2.vel.setValues( 0, 5 );
 
@@ -66,6 +68,8 @@ function test_Entity_shapes( tf: TestFuncs ) {
 
 
 	// position and rotation
+	e.cachedShapes = [];
+
 	e.vel.zero();
 	
 	let e3 = new Entity( new Vec2( 50, 0 ), 10, 20 );
@@ -89,6 +93,8 @@ function test_Entity_shapes( tf: TestFuncs ) {
 	tf.ASSERT_EQ( s[2].normals[0], new Vec2( 0, 1 ) );
 
 	// position, rotation, and velocity
+	e.cachedShapes = [];
+
 	e.vel.setValues( 1, 0 );
 	e3.angle = 0;
 	e3.angleVel = Math.PI / 2;

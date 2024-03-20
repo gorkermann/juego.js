@@ -118,7 +118,7 @@ export class Entity {
 
 	discardFields: Array<string> = [
 		'hovered', 'selected', 'preselected',
-		'edit', 'ranges', 'savedVals'
+		'edit', 'ranges', 'savedVals', 'hitWith'
 	];
 
 	/*saveFields: Array<string> = ['pos', 'vel',
@@ -156,7 +156,6 @@ export class Entity {
 
 		toaster = new tp.Toaster( constructors );
 		let copy = tp.fromJSON( json, toaster ) as Entity;
-		tp.resolveList( [copy], toaster );
 
 		copy.parent = null;
 
@@ -184,8 +183,6 @@ export class Entity {
 		}
 		
 		this.angle += this.angleVel * step;
-
-		this.cachedShapes = [];
 
 		for ( let sub of this.getSubs() ) {
 			sub.advance( step );
@@ -252,8 +249,8 @@ export class Entity {
 	}
 
 	// don't override! override getOwnShapes instead
-	getShapes( step: number=0.0 ): Array<Shape> {
-		if ( !this.parent ) {
+	getShapes( step: number=0.0, useCached: boolean=false ): Array<Shape> {
+		if ( !this.parent && useCached ) {
 			if ( this.cachedShapes[0] ) {
 				if ( step == 0.0 || !this.inMotion ) return this.cachedShapes[0];
 			}
@@ -278,11 +275,6 @@ export class Entity {
 
 		for ( let shape of shapes ) {
 			shape.calcMinMax();
-		}
-
-		if ( !this.parent ) {
-			if ( step == 0.0 ) this.cachedShapes[0] = shapes;
-			if ( step == 1.0 ) this.cachedShapes[1] = shapes;
 		}
 
 		return shapes;
@@ -409,6 +401,8 @@ export class Entity {
 
 		if ( !this._subs.includes( entity ) ) {
 			this._subs.push( entity );
+
+			this.cachedShapes = [];
 		}
 
 		entity.parent = this;
@@ -461,9 +455,9 @@ export class Entity {
 		return this != otherEntity && ( this.collisionMask & otherEntity.collisionGroup ) > 0;
 	}
 
-	overlaps ( otherEntity: Entity, step: number ): Array<Contact> {
-		let shapes = this.getShapes( step );
-		let otherShapes = otherEntity.getShapes( step );
+	overlaps ( otherEntity: Entity, step: number, useCached: boolean=false ): Array<Contact> {
+		let shapes = this.getShapes( step, useCached );
+		let otherShapes = otherEntity.getShapes( step, useCached );
 
 		/*
 			IDEAS

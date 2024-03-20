@@ -1,5 +1,5 @@
 type HSLA = {h: number, s: number, l: number, a: number}
-type RGBA = {r: number, g: number, b: number, a: number}
+export type RGBA = {r: number, g: number, b: number, a: number}
 
 let shaders: Array<( mat: Material ) => HSLA> = [];
 
