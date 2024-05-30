@@ -650,7 +650,7 @@ export class Anim {
 			for ( let targetKey in frame.targets ) {
 				for ( let otherFrame of otherThread ) {
 					if ( targetKey in otherFrame.targets ) {
-						throw new Error( this.name + ': target collison for ' + targetKey );
+						throw new Error( this.name + ': target coillison for ' + targetKey );
 					}
 				}
 			}	
@@ -667,9 +667,11 @@ export class Anim {
 		let threadIndex = Math.floor( options.threadIndex );
 
 		try {
-			if ( this.initFrame( frame ) && 
-				 !this.matchesOtherThread( frame, this.threads[threadIndex] ) ) {
+			// hard to check if target collisions will actually occur 
+			//if ( this.initFrame( frame ) && 
+			//	 !this.matchesOtherThread( frame, this.threads[threadIndex] ) ) {
 
+			if ( this.initFrame( frame ) ) {
 				if ( options.tag ) frame.tag = options.tag; 
 				frame.delay = options.delay;
 

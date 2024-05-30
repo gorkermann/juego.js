@@ -93,7 +93,7 @@ function test_crush( tf: TestFuncs ) {
 
 	ceiling.pos.set( new Vec2( 50, -20 ) );	
 
-	// floor and ceiling touch, ceiling moving at 45deg
+	// floor and ceiling touch, ceiling moving 45deg downangled
 	ceiling.vel.set( new Vec2( 1, 1 ) );
 
 	resetPlayer();
@@ -159,7 +159,7 @@ function test_crush( tf: TestFuncs ) {
 
 	let setChamfer = ( angle: number ) => {
 		chamfer.angle = angle;
-		offset = new Vec2( 0, -player.height / 2 - chamfer.height / 2 ).rotate( chamfer.angle );
+		offset = new Vec2( 0, -player.height / 2 - chamfer.height / 2 ).rotate( chamfer.angle ); // overlaps player
 		chamfer.pos.set( player.pos.plus( offset ) );
 		chamfer.vel.set( Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 ) );
 	}
@@ -187,6 +187,8 @@ function test_crush( tf: TestFuncs ) {
 	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
 	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
+
+	// TODO: test where angled ceiling is moving horizontally
 }
 
 let tests: Array<Test> = [];

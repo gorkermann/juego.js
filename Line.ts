@@ -117,8 +117,14 @@ export class Line {
 
 		// find intersection
 		let result = null;
-		let dx_this = Math.abs( this.p2.x - this.p1.x );
-		let dx_line = Math.abs( line.p2.x - line.p1.x );
+		//let dx_this = Math.abs( this.p2.x - this.p1.x ); // EDIT
+		//let dx_line = Math.abs( line.p2.x - line.p1.x ); // EDIT
+
+		let dx_this = this.p2.x - this.p1.x;
+		if ( dx_this < 0 ) dx_this *= -1;
+
+		let dx_line = line.p2.x - line.p1.x;
+		if ( dx_line < 0 ) dx_line *= -1;
 
 		if ( dx_this < 0.01 && dx_line < 0.01 ) {
 			// both vertical, do nothing, return null

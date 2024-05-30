@@ -98,19 +98,24 @@ export class EntityManager {
 
 			entity.inMotion = false;
 
-			entity.doForAllChildren( ( child ) => {
-				if ( entity.inMotion ) return;
-
-				if ( child.vel.lengthSq() > 0.0 || child.angleVel != 0.0 ) {
+			for ( let flat of entity.getFlatList() ) {
+				if ( flat.vel.lengthSq() > 0.0 || flat.angleVel != 0.0 ) {
 					entity.inMotion = true;
+					break;
 				}
-			} );
+			}
+
+			if ( entity.cachedShapes.length == 2 && !entity.inMotion ) {
+				continue;
+			}
 
 			entity.cachedShapes = [];
 			entity.cachedShapes[0] = entity.getShapes( 0.0 );
 
 			if ( entity.inMotion ) {
 				entity.cachedShapes[1] = entity.getShapes( 1.0 );
+			} else {
+				entity.cachedShapes[1] = entity.cachedShapes[0];
 			}
 		}
 	}

@@ -59,6 +59,8 @@ export class ShapeHit extends RayHit {
 
 	constructor( point: Vec2, normal: Vec2, material: Material ) {
 		super( point, normal, material );
+
+		this.dist = -1;
 	}
 }
 
@@ -211,14 +213,33 @@ export class Shape {
 	}
 
 	// Make a rectangle
-	static makeRectangle( topLeft: Vec2, w: number, h: number ): Shape {
-		let shape: Shape = Shape.fromPoints( 
-				[ topLeft.copy(),
-			 	  new Vec2( topLeft.x + w, topLeft.y ),
-				  new Vec2( topLeft.x + w, topLeft.y + h ),
-				  new Vec2( topLeft.x, topLeft.y + h ) ], LoopDir.CW );
+	static makeRectangle( topLeft: Vec2, w: number, h: number, chamfer: number=0 ): Shape {
+		if ( chamfer > 0 ) {
+			if ( chamfer > w / 2 ) chamfer = w / 2;
+			if ( chamfer > h / 2 ) chamfer = h / 2;
 
-		return shape;
+			let shape: Shape = Shape.fromPoints( 
+					[ topLeft.plus( new Vec2( 0, chamfer ) ),
+					  topLeft.plus( new Vec2( chamfer, 0 ) ),
+				 	  new Vec2( topLeft.x + w - chamfer, topLeft.y ),
+				 	  new Vec2( topLeft.x + w, 			 topLeft.y + chamfer ),
+					  new Vec2( topLeft.x + w, 			 topLeft.y + h - chamfer ),
+					  new Vec2( topLeft.x + w - chamfer, topLeft.y + h ),
+					  new Vec2( topLeft.x + chamfer, 	 topLeft.y + h ) ,
+					  new Vec2( topLeft.x, 			 	 topLeft.y + h - chamfer ) 
+					], LoopDir.CW );
+
+			return shape;
+		} else {
+
+			let shape: Shape = Shape.fromPoints( 
+					[ topLeft.copy(),
+				 	  new Vec2( topLeft.x + w, topLeft.y ),
+					  new Vec2( topLeft.x + w, topLeft.y + h ),
+					  new Vec2( topLeft.x, topLeft.y + h ) ], LoopDir.CW );
+
+			return shape;
+		}
 	}
 
 	static makeCircle( pos: Vec2, d: number, count: number, offset: number=0.0 ): Shape {
@@ -339,6 +360,41 @@ export class Shape {
 		return result;
 	}
 
+	rayIntersectSingle( ray: Line, hit: ShapeHit ): boolean {
+		//let result: Array<ShapeHit> = [];
+		//let minDistSq = 0;
+		let found = false;
+		let edge: Line;
+		let point: Vec2;
+
+		for ( let i = 0; i < this.edges.length; i++ ) {
+			edge = this.edges[i];
+
+			point = ray.intersects( edge );
+			
+			if ( point !== null ) {
+				let dist = point.distTo( ray.p1 );
+
+				if ( hit.dist < 0 || dist < hit.dist ) {
+					hit.point = point;
+					hit.normal.set( this.normals[i] );
+
+					if ( edge.material ) {
+						hit.material = edge.material.copy();
+					} else {
+						hit.material = this.material.copy();
+					}
+
+					hit.dist = dist;
+
+					found = true;
+				}
+			}
+		}
+
+		return found;
+	}
+
 	vertIntersectCount( point: LocalPoint, y: number ) {
 		let testLine = Line.fromPoints( point, new Vec2( point.x, y ) );
 		let count = 0;
@@ -354,12 +410,13 @@ export class Shape {
 		return count;
 	}
 
-	contains( point: WorldPoint, step: number=0.0, doTransform: boolean=true ): boolean {
+	contains( point: WorldPoint, step: number=0.0 ): boolean {
 		let p: LocalPoint = point.copy();
 
-		if ( this.parent && doTransform ) {
-			this.parent.unapplyTransform( p, step );
-		}
+		// GDS removed option doTransform 3/9/24 since only 1 call seemed to use it (in doBool(), which is unused/not very well tested)
+		// if ( this.parent && doTransform ) {
+		// 	this.parent.unapplyTransform( p, step );
+		// }
 
 		let [min, max] = Shape.getMinMax( this.points );
 
@@ -400,7 +457,7 @@ export class Shape {
 
 		if ( !this.hollow ) {
 			for ( let point of otherShape.points ) {
-				if ( this.contains( point, 0.0, false ) ) {
+				if ( this.contains( point, 0.0 ) ) {
 					contained.push( point );
 					insideThis = true;
 				}
@@ -409,7 +466,7 @@ export class Shape {
 
 		if ( !otherShape.hollow ) {
 			for ( let point of this.points ) {
-				if ( otherShape.contains( point, 0.0, false ) ) {
+				if ( otherShape.contains( point, 0.0 ) ) {
 					contained.push( point );
 					insideOther = true;
 				}

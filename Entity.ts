@@ -41,6 +41,11 @@ export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null 
 	return result;
 }
 
+export type GetShapesOptions = {
+	useCached?: boolean,
+	local?: boolean
+}
+
 type ApplyTransformOptions = {
 	angleOnly?: boolean,
 	local?: boolean
@@ -61,6 +66,8 @@ export class Entity {
 	parent: Entity = null;
 	_subs: Array<Entity> = [];
 
+	messages: Array<string> = [];
+
 	pos: Vec2 = new Vec2(); // position relative to parent
 	vel: Vec2 = new Vec2(); // added to pos in advance()
 	angle: number = 0.0;	// if transformOrder=TRANSLATE_THEN_ROTATE, angle relative to parent
@@ -74,6 +81,7 @@ export class Entity {
 	width: number;	// default width (diameter for a circular entity)
 	height: number;	// default height
 
+	alpha: number = 1.0;
 	material: Material = new Material( 0, 0, 0.5 ); // default color
 
 	presetShapes: Array<Shape> = []; // overrides return value of this._getDefaultShapes(). Only updated when basic shapes are changed
@@ -249,8 +257,10 @@ export class Entity {
 	}
 
 	// don't override! override getOwnShapes instead
-	getShapes( step: number=0.0, useCached: boolean=false ): Array<Shape> {
-		if ( !this.parent && useCached ) {
+	getShapes( step: number=0.0, options: GetShapesOptions={} ): Array<Shape> {
+		if ( options.local === undefined ) options.local = true;
+
+		if ( !this.parent && options.useCached ) {
 			if ( this.cachedShapes[0] ) {
 				if ( step == 0.0 || !this.inMotion ) return this.cachedShapes[0];
 			}
@@ -260,22 +270,24 @@ export class Entity {
 		let shapes: Array<Shape> = this.getOwnShapes();
 
 		for ( let sub of this.getSubs() ) {
-			shapes.push( ...sub.getShapes( step ) );
+			for ( let sshape of sub.getShapes( step ) ) { // don't pass options	
+				shapes.push( sshape ); 
+			}
 		}
 
 		for ( let shape of shapes ) {
 			for ( let p of shape.points ) {
-				this.applyTransform( p, step, { local: true } );
+				this.applyTransform( p, step, { local: options.local } );
 			}
 
 			for ( let n of shape.normals ) {
-				this.applyTransform( n, step, { local: true, angleOnly: true } );
+				this.applyTransform( n, step, { local: options.local, angleOnly: true } );
 			}
 		}
 
-		for ( let shape of shapes ) {
-			shape.calcMinMax();
-		}
+		// for ( let shape of shapes ) {
+		// 	shape.calcMinMax();
+		// }
 
 		return shapes;
 	}
@@ -384,6 +396,12 @@ export class Entity {
 		return p;
 	}
 
+	getAlpha(): number {
+		if ( this.alpha == 0.0 ) return 0.0;
+		else if ( !this.parent ) return this.alpha;
+		else return this.alpha * this.parent.getAlpha();
+	}
+
  	/* children */
 
 	cull() {
@@ -418,6 +436,16 @@ export class Entity {
 		for ( let sub of this.getSubs() ) {
 			sub.doForAllChildren( func );
 		}
+	}
+
+	getFlatList(): Array<Entity> {
+		let result: Array<Entity> = [this];
+
+		for ( let sub of this.getSubs() ) {
+			result = result.concat( sub.getFlatList() );
+		}
+
+		return result;
 	}
 
 	spawnEntity( newEntity: Entity ): void {
@@ -456,8 +484,8 @@ export class Entity {
 	}
 
 	overlaps ( otherEntity: Entity, step: number, useCached: boolean=false ): Array<Contact> {
-		let shapes = this.getShapes( step, useCached );
-		let otherShapes = otherEntity.getShapes( step, useCached );
+		let shapes = this.getShapes( step, { useCached: useCached } );
+		let otherShapes = otherEntity.getShapes( step, { useCached: useCached } );
 
 		/*
 			IDEAS
@@ -469,10 +497,22 @@ export class Entity {
 			output multiple contacts for entities with multiple shapes
 		 */
 
-		let contacts: Array<Contact> = [];
+		let contacts: Array<Contact>;
+		let sub, otherSub: Entity;
 
 		for ( let shape of shapes ) {
 			for ( let otherShape of otherShapes ) {
+
+				// collision group
+				sub = shape.parent;
+				if ( !sub.collisionGroup ) sub = this;
+
+				otherSub = otherShape.parent;
+				if ( !otherSub.collisionGroup ) otherSub = otherEntity;
+
+				if ( !sub.canBeHitBy( otherSub ) ) continue;
+
+				// boundary box
 				if ( shape.minmax.length == 0 ) shape.calcMinMax();
 				if ( otherShape.minmax.length == 0 ) otherShape.calcMinMax();
 
@@ -485,20 +525,15 @@ export class Entity {
 				if ( shape.minmax[0].y > otherShape.minmax[1].y + 1 &&
 					 shape.minmax[1].y > otherShape.minmax[1].y + 1 ) continue;
 
+				// contact
 				let contact = null;
 				let maxScore = 0;
-
-				let sub = shape.parent;
-				if ( !sub.collisionGroup ) sub = this;
-
-				let otherSub = otherShape.parent;
-				if ( !otherSub.collisionGroup ) otherSub = otherEntity;
-
-				if ( !sub.canBeHitBy( otherSub ) ) continue;
 
 				contact = shape.getEdgeContact( otherShape );
 
 				if ( contact ) {
+					if ( !contacts ) contacts = [];
+
 					contact.sub = sub;
 					contact.otherSub = otherSub;
 					contacts.push( contact );
@@ -506,7 +541,7 @@ export class Entity {
 			}
 		}
 		
-		return contacts;
+		return contacts ? contacts : [];
 	}
 
 	hitWithMultiple( otherEntity: Entity, contacts: Array<Contact> ): void {
@@ -536,7 +571,7 @@ export class Entity {
 		let output = [];
 
 		for ( let shape of this.getShapes() ) {
-			if ( shape.contains( p, 0.0, false ) ) {
+			if ( shape.contains( p, 0.0 ) ) {
 				output.push( shape.parent );
 			}
 		}

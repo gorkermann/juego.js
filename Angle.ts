@@ -23,7 +23,9 @@ export class Angle {
 	}
 
 	static between( angle: number, min: Angle_HalfTurn, max: Angle_HalfTurn ) {
-		if ( Math.abs( max - min ) > Math.PI * 2 - 0.01 ) return true; // sweep covers entire circle
+		//if ( Math.abs( max - min ) > Math.PI * 2 - 0.01 ) return true; // sweep covers entire circle
+		if ( max - min > Math.PI * 2 - 0.01 ) return true; // sweep covers entire circle
+		if ( min - max > Math.PI * 2 - 0.01 ) return true; // sweep covers entire circle
 
 		let sweep: Angle_PosTurn = ( max - min ) % ( Math.PI * 2 ); // modulus not necessary if min/max are actually half turns or less
 		if ( sweep < 0 ) sweep += Math.PI * 2;
@@ -34,7 +36,7 @@ export class Angle {
 		return diff <= sweep;
 	}
 
-	static getSweep( points: Array<Vec2>, origin: Vec2 ): [Angle_HalfTurn, Angle_HalfTurn] {
+	static getSweep( points: Array<Vec2>, origin: Vec2, target?: [Angle_HalfTurn, Angle_HalfTurn] ): [Angle_HalfTurn, Angle_HalfTurn] {
 		let min, max: Angle_Unbound;
 		let startAngle, prevAngle: Angle_HalfTurn;
 		let balance: Angle_Unbound;
@@ -76,8 +78,15 @@ export class Angle {
 		} else {
 			min = Angle.normalize( startAngle + min );
 			max = Angle.normalize( startAngle + max );
-		}	
+		}
 
-		return [min, max];
+		if ( !target ) {
+			return [min, max];
+		} else {
+			target[0] = min;
+			target[1] = max;
+
+			return target;
+		}
 	}
 }

@@ -29,9 +29,8 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 	let lastTotal = 0.0;
 	let contacted: Entity = null;
 	let shapes = [];
-	let blockedDirs: Array<Contact> = [];
-	let pushDirs: Array<Contact> = [];
-	let pullDirs: Array<Contact> = [];
+	let blockedContacts: Array<Contact> = [];
+	let pushContacts: Array<Contact> = [];
 
 	let minPartialStep = 0.05;
 
@@ -69,7 +68,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 
 			// TODO: rank contacts
 			for ( let otherEntity of otherEntities ) {
-				if ( !entity.canBeHitBy( otherEntity ) ) continue;
+				if ( !entity.canBeHitBy( otherEntity ) ) continue; // TODO: this breaks sub-entity collisions? (parent is ETHEREAL, child is LEVEL?)
 
 				// TODO: invalidate cache[1] once velocity is changed?
 				let contacts = entity.overlaps( otherEntity, stepTotal + partialStep, true );
@@ -107,15 +106,13 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 
 		for ( let contact of solidContacts ) {
 			
-			//pushUnique( { dir: contact.normal.copy(), contact: contact }, blockedDirs, solverDirCompare );
-
 			/* player hits something, cancel player velocity in object direction */
 			let ndot = entity.vel.dot( contact.normal );
 			
-			if ( ndot <= 0 ) {
-				pushUnique( contact, blockedDirs, solverDirCompare );
+			if ( ndot <= 0.0001 ) {
+				pushUnique( contact, blockedContacts, solverDirCompare );
 
-				let advance = stepTotal;// - lastTotal;
+				let advance = stepTotal - lastTotal; // uncommented, fixes closing-V error
 				if ( advance < minPartialStep ) advance = 0; // at wall, running into wall, don't move at all
 
 				entity.pos.add( entity.vel.times( advance ) );
@@ -124,7 +121,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				lastTotal = stepTotal; // not sure if this is necessary
 			}
 
-			/* object pushes player */
+			/* object pushes player */ 
 			if ( contact.otherSub.collisionGroup & pushMask ) {
 				let len = contact.vel.length();
 
@@ -138,16 +135,28 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 					if ( vdot > 0 ) {
 						push.sub( dir.times( vdot ) );
 					}
-					
-					// add push to player velocity
+
+					// check if push is in the same direction as the contact
 					let ahead = entity.pos.minus( contact.point ).dot( push ) > 0;
 					if ( ahead ) {
+
+						// add push to player velocity
 						entity.vel.add( push.times( step - stepTotal ) );
 
 						// potential crush directions
-						pushUnique( contact, pushDirs, solverDirCompare );
+						pushUnique( contact, pushContacts, solverDirCompare );
 					}
 				}
+			}
+		}
+
+		// cancel pushes in blocked directions
+		for ( let blockedContact of blockedContacts ) {
+			if ( pushContacts.includes( blockedContact ) ) continue;
+
+			let pdot = entity.vel.dot( blockedContact.normal );
+			if ( pdot < 0 ) {
+				entity.vel.sub( blockedContact.normal.times( pdot ) );
 			}
 		}
 
@@ -161,17 +170,17 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 
 	let crushed = false;
 	let crusher = null;
-	for ( let pushDir of pushDirs ) {
-		for ( let blockedDir of blockedDirs ) {
-			if ( blockedDir == pushDir ) continue;
-			if ( blockedDir.otherSub == pushDir.otherSub ) continue;
+	for ( let pushContact of pushContacts ) {
+		for ( let blockedContact of blockedContacts ) {
+			if ( blockedContact == pushContact ) continue;
+			if ( blockedContact.otherSub == pushContact.otherSub ) continue;
 
-			if ( blockedDir.normal.dot( pushDir.normal ) < -0.95 ) {
+			if ( blockedContact.normal.dot( pushContact.normal ) < -0.95 ) {
 				crushed = true;
-				crusher = pushDir.otherSub;
+				crusher = pushContact.otherSub;
 			}
 		}
 	}
 
-	return { blockedDirs: blockedDirs.map( x => x.normal ), crushed: crushed, crusher: crusher };
+	return { blockedDirs: blockedContacts.map( x => x.normal ), crushed: crushed, crusher: crusher };
 }
