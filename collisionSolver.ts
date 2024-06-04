@@ -24,7 +24,7 @@ export type SolverResult = {
 
 let VEL_EPSILON = 0.001;
 
-export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>, solidMask: number, pushMask: number, step: number ): SolverResult {
+export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>, solidMask: number, pushMask: number, step: number, singlePass: boolean=false ): SolverResult {
 	let stepTotal = 0.0;
 	let lastTotal = 0.0;
 	let contacted: Entity = null;
@@ -171,7 +171,7 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			}
 		}
 
-		if ( solidContacts.length > 0 ) break; // EDIT might not work with pushers?
+		if ( singlePass && solidContacts.length > 0 ) break; // EDIT might not work with pushers?
 
 		stepTotal += partialStep;
 		iterations += 1;

@@ -326,18 +326,18 @@ function test_ShapeContains( tf: TestFuncs ) {
 	tf.ASSERT( s.contains( new Vec2( -5, 5 ) ) );
 	tf.ASSERT( !s.contains( new Vec2( -40, 5 ) ) );
 
-	// rotate the parent
+	// rotate the parent (no transform)
 	e.angle = Math.PI / 2;
 	[min, max] = Shape.getMinMax( s.points );
 
 	tf.ASSERT_EQ( min, new Vec2( -5, 0 ) );
 	tf.ASSERT_EQ( max, new Vec2( 5, 40 ) );
 
-	tf.ASSERT( !s.contains( new Vec2( 0, 20 ) ) );
-	tf.ASSERT( s.contains( new Vec2( -20, 0 ) ) );
+	tf.ASSERT( s.contains( new Vec2( 0, 20 ) ) );
+	tf.ASSERT( !s.contains( new Vec2( -20, 0 ) ) );
 	tf.ASSERT( s.contains( new Vec2( -2, 2 ) ) );
 	tf.ASSERT( s.contains( new Vec2( -5, 5 ) ) );
-	tf.ASSERT( s.contains( new Vec2( -40, 5 ) ) );
+	tf.ASSERT( !s.contains( new Vec2( -40, 5 ) ) );
 
 	// random entity orientations
 	for ( let i = 0; i < 10; i++ ) {
@@ -347,9 +347,9 @@ function test_ShapeContains( tf: TestFuncs ) {
 
 		let p = new Vec2( -5 + Math.random() * 10, 0 + Math.random() * 40 );
  
-		e.applyTransform( p );
+		//e.applyTransform( p );
 
-		tf.ASSERT( s.contains( p ) );
+		tf.ASSERT( s.contains( p ) ); // no transform
 	}
 }
 

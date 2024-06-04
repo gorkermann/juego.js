@@ -813,10 +813,10 @@ function test_threads( tf: TestFuncs ) {
 
 	tf.ASSERT_EQ( anim.threads.length, 1 );
 	tf.ASSERT_EQ(
-		 // x is already present in thread 0 (duplicate target)
+		 // x is already present in thread 0 (duplicate target ALLOWED)
 		anim.pushFrame( new AnimFrame( { 'x': { value: 2, expireOnReach: true } } ), { threadIndex: 1 } ),
-		false );
-	tf.ASSERT_EQ( anim.threads.length, 1 );
+		true );
+	tf.ASSERT_EQ( anim.threads.length, 2 );
 
 	anim.pushFrame( new AnimFrame( {
 		'y': { value: 2, expireOnReach: true }, // no throw, since collisions with default frame are ignored
@@ -825,7 +825,7 @@ function test_threads( tf: TestFuncs ) {
 	tf.ASSERT_EQ( anim.isDone(), false );
 	tf.ASSERT_EQ( anim.threads.length, 2 );
 	tf.ASSERT_EQ( anim.threads[0].length, 1 );
-	tf.ASSERT_EQ( anim.threads[1].length, 1 );
+	tf.ASSERT_EQ( anim.threads[1].length, 2 );
 
 	anim.update( 1.0, 1 );
 

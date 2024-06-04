@@ -1,6 +1,6 @@
 import { TestFuncs, Test } from '../lib/TestRun.js'
 
-import { solveCollisionsFor } from '../collisionSolver.js'
+import { solveCollisionsFor, SolverResult } from '../collisionSolver.js'
 import { Contact } from '../Contact.js'
 import { Entity } from '../Entity.js'
 import { Line } from '../Line.js'
@@ -13,9 +13,9 @@ function shake_Contact( tf: TestFuncs ) {
 	let e = new Entity( new Vec2( 0, 0 ), 0, 0 );
 	let e2 = new Entity( new Vec2( 0, 0 ), 0, 0 );
 
-	new Contact( e, e2, null, new Vec2( 1, 0 ) );
-	tf.THROWS( () => new Contact( e, e2, new Vec2( 0, 0 ), null ) );
-	new Contact( e, e2, new Vec2( 0, 0 ), new Vec2( 2, 0 ) ); // normal too long
+	new Contact( e, e2, null, null, new Vec2( 1, 0 ) );
+	tf.THROWS( () => new Contact( e, e2, null, new Vec2( 0, 0 ), null ) );
+	new Contact( e, e2, null, new Vec2( 0, 0 ), new Vec2( 2, 0 ) ); // normal too long
 }
 
 function test_crush( tf: TestFuncs ) {
@@ -40,12 +40,15 @@ function test_crush( tf: TestFuncs ) {
 		player.vel.set( new Vec2( 0, 0 ) );
 	}
 
+	let normals = function( result: SolverResult ) {
+		return result.blockedContacts.map( x => x.normal );
+	}
 
 	/* neither moving */
 
 	// floor touches, ceiling doesn't
 	let result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// floor and ceiling touch
@@ -53,7 +56,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	/* one moving */
@@ -63,7 +66,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// floor and ceiling touch, ceiling moving laterally
@@ -71,7 +74,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// floor and ceiling touch, ceiling moving toward
@@ -79,7 +82,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
 	// ceiling above, ceiling moving toward
@@ -88,17 +91,16 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } ); // fails single-pass (missing ceiling)
 	tf.ASSERT_EQ( result.crushed, true );
 
-	ceiling.pos.set( new Vec2( 50, -20 ) );	
-
 	// floor and ceiling touch, ceiling moving 45deg downangled
+	ceiling.pos.set( new Vec2( 50, -20 ) );
 	ceiling.vel.set( new Vec2( 1, 1 ) );
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
 	// floor and ceiling touch, ceiling moving slightly downangled
@@ -106,7 +108,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
 
@@ -118,7 +120,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// floor and ceiling touch, both moving up
@@ -127,7 +129,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } ); // fails single pass (missing ceiling)
 	tf.ASSERT_EQ( result.crushed, true );
 
 	// floor and ceiling touch, both moving toward
@@ -136,7 +138,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
 	// floor and ceiling touch, both moving up, floor moving faster
@@ -145,7 +147,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( 0, 1 )], { unordered: true } ); // fails single pass (missing ceiling)
 	tf.ASSERT_EQ( result.crushed, true );
 
 
@@ -169,7 +171,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), new Vec2( -1, 1 ).unit()], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), new Vec2( -1, 1 ).unit()], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// 20deg (just shy of threshold) 
@@ -177,7 +179,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, false );
 
 	// 15deg (under threshold) 
@@ -185,7 +187,7 @@ function test_crush( tf: TestFuncs ) {
 
 	resetPlayer();
 	result = solveCollisionsFor( player, entities2, COL_WALL, COL_WALL, 1.0 );
-	tf.ASSERT_EQ( result.blockedDirs, [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
+	tf.ASSERT_EQ( normals( result ), [new Vec2( 0, -1 ), Vec2.fromPolar( chamfer.angle + Math.PI / 2, 1 )], { unordered: true } );
 	tf.ASSERT_EQ( result.crushed, true );
 
 	// TODO: test where angled ceiling is moving horizontally
