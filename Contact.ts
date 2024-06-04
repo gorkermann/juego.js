@@ -1,4 +1,5 @@
 import { Entity } from './Entity.js'
+import { Shape } from './Shape.js'
 import { Vec2 } from './Vec2.js'
 
 export class Contact {
@@ -8,13 +9,15 @@ export class Contact {
 	normal: Vec2; 				// normal to surface of other entity
 	vel: Vec2 = new Vec2(); 	// at point on other entity
 	ovel: Vec2 = new Vec2();
-	slice: number = 0.0; 		// portion of primary entity which is outside of the contacted edge of the other entity
+	slice: number = 0.0; 		// portion of primary entity which is outside of the contacted edge of the other entity 
 	
+	otherShape: Shape;
+
 	/* debug only */
 
 	inters: Array<Vec2> = [];
 
-	constructor( sub: Entity, otherSub: Entity, point: Vec2, normal: Vec2 ) {
+	constructor( sub: Entity, otherSub: Entity, otherShape: Shape, point: Vec2, normal: Vec2 ) {
 		if ( !point ) {
 			console.error( 'Contact.constructor: point is ' + point );
 		}
@@ -30,6 +33,7 @@ export class Contact {
 
 		this.sub = sub;
 		this.otherSub = otherSub;
+		this.otherShape = otherShape;
 		this.point = point;
 		this.normal = normal;
 	}

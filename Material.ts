@@ -111,6 +111,22 @@ export class Material {
 		return mat;
 	}
 
+	setFrom( mat: Material ) {
+		this.hue = mat.hue;
+		this.sat = mat.sat;
+		this.lum = mat.lum;
+
+		this.shaderIndex = mat.shaderIndex;
+
+		this.alpha = mat.alpha;
+
+		this.skewH = mat.skewH;
+		this.skewS = mat.skewS;
+		this.skewL = mat.skewL;
+
+		this.emit = mat.emit;
+	}
+
 	getHSLA(): HSLA {
 		return shaders[this.shaderIndex]( this );
 	}

@@ -17,7 +17,7 @@ function solverDirCompare( dir1: Contact, dir2: Contact ) {
 }
 
 export type SolverResult = {
-	blockedDirs: Array<Vec2>,
+	blockedContacts: Array<Contact>,
 	crushed: boolean,
 	crusher: Entity
 }
@@ -50,25 +50,28 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			contacted = null;
 
 			// debug draw
-			/*if ( ( window as any ).context ) {
-				for ( let entity of otherEntities ) {
-					let shapes = entity.getShapes( stepTotal + partialStep );
+			/*	if ( typeof document !== 'undefined' ) {
+					if ( ( window as any ).context ) {
+						for ( let entity of otherEntities ) {
+							let shapes = entity.getShapes( stepTotal + partialStep );
 
-					for ( let shape of shapes ) {
-						shape.stroke( ( window as any ).context );
+							for ( let shape of shapes ) {
+								shape.stroke( ( window as any ).context );
+							}
+						}
+
+						let shapes = entity.getShapes( stepTotal + partialStep );
+
+						for ( let shape of shapes ) {
+							shape.stroke( ( window as any ).context );
+						}
 					}
-				}
-
-				let shapes = entity.getShapes( stepTotal + partialStep );
-
-				for ( let shape of shapes ) {
-					shape.stroke( ( window as any ).context );
-				}
 			}*/ // debug draw
 
-			// TODO: rank contacts
 			for ( let otherEntity of otherEntities ) {
-				if ( !entity.canBeHitBy( otherEntity ) ) continue; // TODO: this breaks sub-entity collisions? (parent is ETHEREAL, child is LEVEL?)
+				// HMMM: this breaks sub-entity collisions? (parent is ETHEREAL, child is LEVEL?)
+				// most entities are the same collision group throughout the tree
+				if ( !entity.canBeHitBy( otherEntity ) ) continue; 
 
 				// TODO: invalidate cache[1] once velocity is changed?
 				let contacts = entity.overlaps( otherEntity, stepTotal + partialStep, true );
@@ -104,6 +107,10 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			}
 		}*/ // debug draw
 
+		let anyBlocked = false;
+
+		solidContacts.sort( ( a, b ) => a.slice - b.slice )
+
 		for ( let contact of solidContacts ) {
 			
 			/* player hits something, cancel player velocity in object direction */
@@ -116,9 +123,9 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				if ( advance < minPartialStep ) advance = 0; // at wall, running into wall, don't move at all
 
 				entity.pos.add( entity.vel.times( advance ) );
-				entity.vel.sub( contact.normal.times( ndot ) ).scale( 1 - advance );
+				entity.vel.sub( contact.normal.times( ndot ) );//.scale( 1 - stepTotal ); // EDIT
 
-				lastTotal = stepTotal; // not sure if this is necessary
+				anyBlocked = true;//lastTotal = stepTotal; // not sure if this is necessary
 			}
 
 			/* object pushes player */ 
@@ -150,6 +157,10 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 			}
 		}
 
+		if ( anyBlocked ) {
+			lastTotal = stepTotal;
+		}
+
 		// cancel pushes in blocked directions
 		for ( let blockedContact of blockedContacts ) {
 			if ( pushContacts.includes( blockedContact ) ) continue;
@@ -159,6 +170,8 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 				entity.vel.sub( blockedContact.normal.times( pdot ) );
 			}
 		}
+
+		if ( solidContacts.length > 0 ) break; // EDIT might not work with pushers?
 
 		stepTotal += partialStep;
 		iterations += 1;
@@ -182,5 +195,5 @@ export function solveCollisionsFor( entity: Entity, otherEntities: Array<Entity>
 		}
 	}
 
-	return { blockedDirs: blockedContacts.map( x => x.normal ), crushed: crushed, crusher: crusher };
+	return { blockedContacts, crushed: crushed, crusher: crusher };
 }

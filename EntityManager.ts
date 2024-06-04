@@ -194,40 +194,40 @@ export class EntityManager {
 			this.entities.push( entity );
 		}
 
-		entity.doForAllChildren( ( e: Entity ) => {
-			let index = this.entitiesById.indexOf( e );
+		for ( let flat of entity.getFlatList() ) {
+			let index = this.entitiesById.indexOf( flat );
 
 			// already in array
 			if ( index >= 0 ) {
-				e.id = index;
+				flat.id = index;
 				return;
 			}
 
 			// id collision
-			if ( this.entitiesById[e.id] ) {
-				e.id = -1;
+			if ( this.entitiesById[flat.id] ) {
+				flat.id = -1;
 			}
 
 			// search for lowest unused id
-			if ( e.id < 0 ) {
+			if ( flat.id < 0 ) {
 				for ( let i = 0; i < this.entitiesById.length; i++ ) {
 					if ( !this.entitiesById[i] ) {
-						this.entitiesById[i] = e;
-						e.id = i;
+						this.entitiesById[i] = flat;
+						flat.id = i;
 
 						break;
 					}
 				}
 
-				if ( e.id < 0 ) {
-					e.id = this.entitiesById.length;
-					this.entitiesById.push( e );
+				if ( flat.id < 0 ) {
+					flat.id = this.entitiesById.length;
+					this.entitiesById.push( flat );
 				}
 
 			} else {
-				this.entitiesById[e.id] = e;
+				this.entitiesById[flat.id] = flat;
 			}
-		} );
+		}
 	}
 
 	insertList( entities: Array<Entity> ) {

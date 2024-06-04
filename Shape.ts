@@ -39,6 +39,10 @@ function getTurnAngle( l1: Line, l2: Line ) {
 	return Math.asin( v1.cross( v2 ) );
 }
 
+function hitSortFunc ( a: ShapeHit, b: ShapeHit ) {
+	return a.dist - b.dist;
+}
+
 let VEL_EPSILON = 0.0001
 
 type A = {
@@ -56,6 +60,7 @@ export class ShapeHit extends RayHit {
 	dist: number;
 	incidentDot: number;
 	normalDist: number;
+	cornerScore: number = 0;
 
 	constructor( point: Vec2, normal: Vec2, material: Material ) {
 		super( point, normal, material );
@@ -355,7 +360,7 @@ export class Shape {
 		// Sort in order of closest to farthest
 		//rayHits.sort( closestTo( ray.p1 ) );
 
-		result.sort( ( a: ShapeHit, b: ShapeHit ) => a.dist - b.dist );
+		result.sort( hitSortFunc );
 
 		return result;
 	}
@@ -380,9 +385,9 @@ export class Shape {
 					hit.normal.set( this.normals[i] );
 
 					if ( edge.material ) {
-						hit.material = edge.material.copy();
+						hit.material.setFrom( edge.material ); // EDIT (is this better ta)
 					} else {
-						hit.material = this.material.copy();
+						hit.material.setFrom( this.material );
 					}
 
 					hit.dist = dist;
@@ -498,7 +503,7 @@ export class Shape {
 			normal = new Vec2( 1, 0 );
 		}
 
-		let contact = new Contact( null, null, point, normal );
+		let contact = new Contact( null, null, otherShape, point, normal );
 
 		contact.vel = vel;
 		contact.slice = 1.0; // insideThis: a shape is always to the right of its own normals
@@ -537,7 +542,7 @@ export class Shape {
 		/*
 			inters.length == 0 means one shape is either completely inside or outside of the other
 
-				implying that an earlier collision was missed
+				implying no collision, or that an earlier collision was missed
 
 			inters.length == 1 means either:
 
@@ -545,6 +550,8 @@ export class Shape {
 				and one of the intersections has been rejected
 
 				or the shape has an unconnected edge (edge.p2 != nextEdge.p1)
+
+				(this is rare)
 		*/
 		if ( inters.length < 1 ) {
 			return this.getBodyContact( otherShape );
@@ -622,16 +629,16 @@ export class Shape {
 				let push = normal.times( dot );
 
 				nvel.add( push ); // no friction
-				ovel.add( selfPush.minus( push ) );
+				ovel.add( selfPush.minus( push ) ); // GDS 6/3/2024: I don't understand what this is for
 			} else {
 				//ovel.add( selfPush );
 			}
 		}
 
 		// create contact
-		contact = new Contact( null, null, point, normal );
+		contact = new Contact( null, null, otherShape, point, normal );
 		contact.vel = nvel;
-		contact.ovel = ovel
+		contact.ovel = ovel;
 		contact.slice = slice;
 		
 		if ( Debug.CONTACT_INTERS ) {
@@ -669,13 +676,21 @@ export class Shape {
 		return sum / 2;
 	}
 
+	// TODO: name forEachIndex arrow funcs for speed improvement
 	// how much of the shape is to the left of the line (0.0=none, 0.5=half, 1.0=all)
 	slice( line: Line ): number {
+		//return 0.5; // EDIT: not using this anywhere?
+
 		// check whether any of the points are on different sides of the line
 		let sides = line.whichSide( this.points );
 
-		let leftCount = sides.filter( x => x < 0 ).length;
-		let rightCount = sides.filter( x => x > 0 ).length;
+		let leftCount = 0;
+		let rightCount = 0;
+
+		for ( let side of sides ) {
+			if ( side < 0 ) leftCount += 1;
+			if ( side > 0 ) rightCount += 1;
+		}
 
 		if ( leftCount == 0 ) return 0.0; // all points are on the right
 		if ( rightCount == 0 ) return 1.0; // all points are on the left
@@ -685,28 +700,38 @@ export class Shape {
 		inters.fill( null );
 
 		// find edges which intersect the line
-		this.forEachIndex( ( i, iNext ) => {
-			if ( sides[i] != 0 && sides[iNext] != 0 && sides[i] == sides[iNext] ) return;
-			
-			let inter = this.edges[i].intersects( line, true )
+		for ( let i = 0, iNext = 0; i < this.points.length; i++ ) {
+			iNext = ( i + 1 ) % this.points.length;
 
-			if ( inter != null ) {
-				inters[i] = inter;
-			}
-		} );
+			//this.forEachIndex( ( i, iNext ) => {
+				if ( sides[i] == sides[iNext] && sides[i] != 0 && sides[iNext] != 0 ) continue;
+				
+				let inter = this.edges[i].intersects( line, true )
+
+				if ( inter != null ) {
+					inters[i] = inter;
+				}
+			//} );
+		}
 
 		// remove intersections that are at point 1 of an edge
 		// (leaving the intersection at point 2 of the next edge)
-		this.forEachIndex( ( i, iNext ) => {
+		for ( let i = 0, iNext = 0; i < this.points.length; i++ ) {
+			iNext = ( i + 1 ) % this.points.length;
+		//this.forEachIndex( ( i, iNext ) => {
 			if ( inters[i] && inters[iNext] && 
 				 this.edges[i].p2.equals( inters[i] ) ) {
 
 				inters[iNext] = null;
 			}
-		} );
+		//} );
+		}
 
-		// sort intersections in by farthest along in the direction of the line
-		let sortedInters = inters.filter( x => x !== null );
+		// sort intersections by farthest along in the direction of the line
+		let sortedInters = [];
+		for ( let inter of inters ) {
+			if ( inter ) sortedInters.push( inter );
+		}
 
 		if ( sortedInters.length == 0 ) {
 			throw new Error( 'Shape.slice: no intersections' );
@@ -722,7 +747,11 @@ export class Shape {
 		let strand: Array<Vec2> = []
 		let leftArea = 0;
 
-		this.forEachIndex( ( i, iNext ) => {
+		//this.forEachIndex( ( i, iNext ) => {
+		for ( let j = 0; j < this.points.length; j++ ) {
+			let i = ( j + startIndex ) % this.points.length;
+			let iNext = ( i + 1 ) % this.points.length;
+		
 			if ( inters[i] ) {
 				strand.push( inters[i] );
 
@@ -740,7 +769,8 @@ export class Shape {
 			if ( s != 0 ) side = s;
 
 			strand.push( this.edges[i].p2 );
-		}, startIndex );
+		//}, startIndex );
+		}
 
 		return leftArea / this.getArea();
 	}

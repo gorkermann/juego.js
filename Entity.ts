@@ -21,6 +21,7 @@ import { Vec2 } from './Vec2.js'
 import { toToast } from './serialization.js'
 import { Shape, LocalPoint, WorldPoint } from './Shape.js'
 import { Dict } from './util.js'
+import { SolverResult } from './collisionSolver.js'
 
 export function cullList( list: Array<any>, func: ( arg0: any ) => boolean=null ): Array<any> {
 	let result: Array<any> = [];
@@ -212,6 +213,8 @@ export class Entity {
 			sub._animateRecur( step, elapsed );
 		}
 	}
+
+	updateGrav( grav: Vec2 ) {}
 
 	update() {}
 
@@ -516,14 +519,10 @@ export class Entity {
 				if ( shape.minmax.length == 0 ) shape.calcMinMax();
 				if ( otherShape.minmax.length == 0 ) otherShape.calcMinMax();
 
-				if ( shape.minmax[0].x < otherShape.minmax[0].x - 1 &&
-					 shape.minmax[1].x < otherShape.minmax[0].x - 1) continue;
-				if ( shape.minmax[0].x > otherShape.minmax[1].x + 1 &&
-					 shape.minmax[1].x > otherShape.minmax[1].x + 1 ) continue;
-				if ( shape.minmax[0].y < otherShape.minmax[0].y - 1 &&
-					 shape.minmax[1].y < otherShape.minmax[0].y - 1 ) continue;
-				if ( shape.minmax[0].y > otherShape.minmax[1].y + 1 &&
-					 shape.minmax[1].y > otherShape.minmax[1].y + 1 ) continue;
+				if ( shape.minmax[1].x < otherShape.minmax[0].x - 1 ) continue;
+				if ( shape.minmax[0].x > otherShape.minmax[1].x + 1 ) continue;
+				if ( shape.minmax[1].y < otherShape.minmax[0].y - 1 ) continue;
+				if ( shape.minmax[0].y > otherShape.minmax[1].y + 1 ) continue;
 
 				// contact
 				let contact = null;
@@ -626,7 +625,7 @@ export class Entity {
 		delete this.savedVals['pos'];
 	}
 
-	/* drawing */ 
+	/* Drawing */ 
 
 	shade() {
 		for ( let sub of this.getSubs() ) {
